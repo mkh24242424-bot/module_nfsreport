@@ -1,6 +1,7 @@
 import module.NFS_PROFILEDATAMANAGER as NFS_PM
 import pandas as pd
 import module.NFS_REPORTINFORMATION as NFS_RI
+import module.NFS_REPORTWRITER as NFS_RW
 
 df_caseinfo = pd.read_csv('./testdata/test_df_caseinfo.csv')
 df_report = pd.read_csv('./testdata/test_df_report.csv')
@@ -16,4 +17,8 @@ info.extract_caseinfo_from_df(df_caseinfo)
 info.extract_evidenceinfo_from_df(df_report)
 info.load_str_profiledatamanager(pm_str)
 info.load_ystr_profiledatamanager(pm_ystr)
+
+RW = NFS_RW.NFSReportWriter(info, [])
+RW.categorize_profiles()
+
 

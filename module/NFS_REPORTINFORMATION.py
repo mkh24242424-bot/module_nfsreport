@@ -25,7 +25,7 @@ class NFSReportInformation():
                                  'Y_프로필_유형', '코드', 'Y_코드', '표기번호', 'Y_표기번호', '기재_여부', 'Y_기재_여부',
                                    '타액_반응', '정액_반응', '혈흔_반응', '검색_결과', '반환_여부']
         try:
-            self.evidenceinfo = df_evidenceinfo.loc[df_evidenceinfo['접수번호']==self.id_case, list_required_columns]
+            self.evidenceinfo = df_evidenceinfo.loc[df_evidenceinfo['접수번호']==self.id_case, list_required_columns].reset_index(drop=True)
         except KeyError as e:
             print(f"{e} : {self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다.")
     

@@ -33,3 +33,25 @@ backup/
 *.tmp
 *.bak
 *~
+
+# Claude Code
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Python version managers
+.python-version
+
+# Additional linters/tools
+.mypy_cache/
+.ruff_cache/
+.tox/
