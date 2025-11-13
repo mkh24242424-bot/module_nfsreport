@@ -1,4 +1,7 @@
+import logging
 from typing import Dict, Set, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 class STRProfile:
     """
@@ -49,6 +52,7 @@ class STRProfile:
         self.id = id
         self.profile = profile if profile is not None else {}
         self.__TA_THRESHOLD = 0
+        logger.debug(f"STRProfile 생성 (id={id}, 좌위 수={len(self.profile)})")
 
     def __find_common_loci(self, target_profile: Dict[str, Set[str]],
                            query_profile: Dict[str, Set[str]]) -> Set[str]:
@@ -99,11 +103,15 @@ class STRProfile:
             False
         """
         if not isinstance(query, STRProfile):
+            logger.error(f"TypeError: query must be an STRProfile instance (got {type(query)})")
             raise TypeError("query must be an STRProfile instance")
 
+        logger.debug(f"일치 확인 (self.id={self.id}, query.id={query.id})")
         for locus in self.__find_common_loci(self.profile, query.profile):
             if self.profile[locus] != query.profile[locus]:
+                logger.debug(f"일치 확인 결과: False (불일치 좌위={locus})")
                 return False
+        logger.debug("일치 확인 결과: True")
         return True
 
     def check_inclusion(self, query: 'STRProfile') -> bool:
@@ -126,13 +134,17 @@ class STRProfile:
             True
         """
         if not isinstance(query, STRProfile):
+            logger.error(f"TypeError: query must be an STRProfile instance (got {type(query)})")
             raise TypeError("query must be an STRProfile instance")
 
+        logger.debug(f"포함 확인 (self.id={self.id}, query.id={query.id})")
         for locus in self.__find_common_loci(self.profile, query.profile):
             alleles_target = self.profile[locus]
             alleles_query = query.profile[locus]
             if not alleles_query.issubset(alleles_target):
+                logger.debug(f"포함 확인 결과: False (불포함 좌위={locus})")
                 return False
+        logger.debug("포함 확인 결과: True")
         return True
 
     def union_profiles(self, query: 'STRProfile') -> 'STRProfile':

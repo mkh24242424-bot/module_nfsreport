@@ -1,6 +1,9 @@
+import logging
 import pandas as pd
 from openpyxl import load_workbook
 import re
+
+logger = logging.getLogger(__name__)
 
 
 def xls_to_dataframe(path: str, header: bool = True) -> pd.DataFrame:
@@ -14,11 +17,12 @@ def xls_to_dataframe(path: str, header: bool = True) -> pd.DataFrame:
     Returns:
         DataFrame: NFIS 파일의 내용을 DataFrame으로 변환한 객체
     """
-
+    logger.debug(f"엑셀 파일 읽기 시작 (path={path})")
     if header:
         df = pd.read_excel(path, dtype='object', header=0)
     else:
         df = pd.read_excel(path, dtype='object', header=None)
+    logger.info(f"엑셀 파일 읽기 완료 (rows={len(df)}, cols={len(df.columns)})")
     return df
 
 
@@ -31,7 +35,7 @@ def sort_by_serial_number(df: pd.DataFrame, key_column: str) -> pd.DataFrame:
         key_column:
         digit: 자릿수
     """
-
+    logger.debug(f"데이터프레임 정렬 시작 (rows={len(df)}, key_column={key_column})")
     df.sort_values(key_column, inplace=True)
     list_serial = list(df[key_column])
     p = re.compile(r'\d+')
@@ -44,6 +48,7 @@ def sort_by_serial_number(df: pd.DataFrame, key_column: str) -> pd.DataFrame:
     df_sorted['RANK'] = df[key_column].apply(lambda x: rank[x])
     df_sorted = df_sorted.sort_values('RANK')
     df_sorted = df_sorted.drop('RANK', axis=1).reset_index(drop=True)
+    logger.debug(f"데이터프레임 정렬 완료 (rows={len(df_sorted)})")
     return df_sorted
 
 

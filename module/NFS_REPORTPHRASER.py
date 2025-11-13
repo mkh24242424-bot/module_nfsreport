@@ -1,10 +1,17 @@
+import logging
 from typing import Any
-
-from PyQt5 import QtCore
-from PyQt5 import uic
+from dataclasses import dataclass
 from PyQt5.QtWidgets import QInputDialog, QMessageBox
 import re
 
+logger = logging.getLogger(__name__)
+
+@dataclass
+class Properties_Phrase:
+    gender: str
+    likelihoodratio: tuple
+    text_evidence: str
+    nickname: str
 
 def input_comparison_case() -> tuple[str | Any, str | Any, Any] | tuple[str | Any, str | Any, str]:
     request_scas, ok = QInputDialog.getText(None, "SCAS 접수 번호 입력",
@@ -26,124 +33,129 @@ def input_comparison_case() -> tuple[str | Any, str | Any, Any] | tuple[str | An
         return request_scas, request_date, request_number
 
 
-def make_phrase_ref(info: dict) -> str:
+def make_phrase_ref(info: Properties_Phrase) -> str:
+    logger.debug(f"대조 문구 생성 시작 (nickname={info.nickname})")
     answer_victim = None
     # 피해자, 변사자, 관계자의 경우 식별 지수 표기 및 문장 단축.
     list_exception = ['피해자', '변사자', '참고인', '관계자']
-    if any([(exception in info['nickname_match']) for exception in list_exception]):
+    if any([(exception in info.nickname) for exception in list_exception]):
         answer_victim = QMessageBox.question(None, '', "식별지수를 제외하시겠습니까?",
                                              QMessageBox.Yes | QMessageBox.No)
     if answer_victim == QMessageBox.Yes:
-        phrase = f"{info['ln_match']}에서 {info['nickname_match']}의 디엔에이형이 검출됨.\r\n"
+        phrase = f"{info.text_evidence}에서 {info.nickname}의 디엔에이형이 검출됨.\r\n"
     else:
-        phrase = f"{info['ln_match']}에서 {info['gender']} 디엔에이형이 검출되고, 이는 {info['nickname_match']}의 디엔에이형과 일치함.\r\n"
-        phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info['lh'][0]} x 10{info['lh'][1]}임.\r\n"
+        phrase = f"{info.text_evidence}에서 {info.gender} 디엔에이형이 검출되고, 이는 {info.nickname}의 디엔에이형과 일치함.\r\n"
+        phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
+    logger.debug(f"대조 문구 생성 완료")
     return phrase
 
 
-def make_phrase_res(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 {info['nickname_match']}의 디엔에이형이 검출됨.\r\n"
+def make_phrase_res(info: Properties_Phrase) -> str:
+    logger.debug(f"대표 문구 생성 (nickname={info.nickname})")
+    phrase = f"{info.text_evidence}에서 {info.nickname}의 디엔에이형이 검출됨.\r\n"
     return phrase
 
 
-def make_phrase_nc(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 디엔에이형을 특정할 수 없음.\r\n"
+def make_phrase_nc(info: Properties_Phrase) -> str:
+    logger.debug("NC 문구 생성")
+    phrase = f"{info.text_evidence}에서 디엔에이형을 특정할 수 없음.\r\n"
     return phrase
 
 
-def make_phrase_nd(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 디엔에이형이 검출되지 않음.\r\n"
+def make_phrase_nd(info: Properties_Phrase) -> str:
+    logger.debug("ND 문구 생성")
+    phrase = f"{info.text_evidence}에서 디엔에이형이 검출되지 않음.\r\n"
     return phrase
 
 
-def make_phrase_ref_y(info: dict) -> str:
-    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info['ln_match']}에서  Y-STR 디엔에이형이 검출되고, {info['nickname_match']}의 Y-STR 디엔에이형과 일치함."
+def make_phrase_ref_y(info: Properties_Phrase) -> str:
+    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info.text_evidence}에서  Y-STR 디엔에이형이 검출되고, {info.nickname}의 Y-STR 디엔에이형과 일치함."
     return phrase
 
 
-def make_phrase_res_y(info: dict) -> str:
-    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info['ln_match']}에서 {info['nickname_match']}의 Y-STR 디엔에이형이 검출됨.\r\n"
+def make_phrase_res_y(info: Properties_Phrase) -> str:
+    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info.text_evidence}에서 {info.nickname}의 Y-STR 디엔에이형이 검출됨.\r\n"
     return phrase
 
 
-def make_phrase_nd_y(info: dict) -> str:
-    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info['ln_match']}에서 Y-STR 디엔에이형이 검출되지 않음.\r\n"
+def make_phrase_nd_y(info: Properties_Phrase) -> str:
+    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info.text_evidence}에서 Y-STR 디엔에이형이 검출되지 않음.\r\n"
     return phrase
 
 
-def make_phrase_nc_y(info: dict) -> str:
-    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info['ln_match']}에서 " \
+def make_phrase_nc_y(info: Properties_Phrase) -> str:
+    phrase = f"남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, {info.text_evidence}에서 " \
              f"Y-STR 디엔에이형을 특정할 수 없음.\r\n"
     return phrase
 
 
-def make_phrase_deceased(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 {info['gender']}({info['nickname_match']}) 디엔에이형이 검출됨.\r\n"
+def make_phrase_deceased(info: Properties_Phrase) -> str:
+    phrase = f"{info.text_evidence}에서 {info.gender}({info.nickname}) 디엔에이형이 검출됨.\r\n"
     return phrase
 
 
-def make_phrase_deceased_expanded(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 {info['gender']}({info['nickname_match']}) 디엔에이형이 검출됨.\r\n"
+def make_phrase_deceased_expanded(info: Properties_Phrase) -> str:
+    phrase = f"{info.text_evidence}에서 {info.gender}({info.nickname}) 디엔에이형이 검출됨.\r\n"
     return phrase
 
 
-def make_phrase_suspect_match(info: dict) -> str:
+def make_phrase_suspect_match(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = input_comparison_case()
-    phrase = (f"{info['nickname_match']}의 디엔에이형은 연관 건인 '{request_scas}({request_date}, "
-              f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 {info['gender']} 디엔에이형과 일치함.\r\n")
-    phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info['lh'][0]} x 10{info['lh'][1]}임.\r\n"
+    phrase = (f"{info.nickname}의 디엔에이형은 연관 건인 '{request_scas}({request_date}, "
+              f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 {info.gender} 디엔에이형과 일치함.\r\n")
+    phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
     return phrase
 
 
-def make_phrase_suspect_match_y(info: dict) -> str:
-    phrase = f"{info['nickname_match']}의 Y-STR 디엔에이형은 위 연관 건에서 검출된 Y-STR 디엔에이형과 일치함.\r\n"
+def make_phrase_suspect_match_y(info: Properties_Phrase) -> str:
+    phrase = f"{info.nickname}의 Y-STR 디엔에이형은 위 연관 건에서 검출된 Y-STR 디엔에이형과 일치함.\r\n"
     return phrase
 
 
-def make_phrase_suspect_nomatch(info: dict) -> str:
+def make_phrase_suspect_nomatch(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = input_comparison_case()
-    phrase = f"{info['nickname_match']}의 디엔에이형은 연관 건인 '{request_scas}({request_date}, " \
-             f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 {info['gender']} 디엔에이형과 일치하지 않음.\r\n"
+    phrase = f"{info.nickname}의 디엔에이형은 연관 건인 '{request_scas}({request_date}, " \
+             f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 {info.gender} 디엔에이형과 일치하지 않음.\r\n"
     return phrase
 
 
-def make_phrase_suspect_nomatch_y(info: dict) -> str:
-    phrase = f"{info['nickname_match']}의 Y-STR 디엔에이형은 위 연관 건에서 검출된 Y-STR 디엔에이형과 일치하지 않음.\r\n"
+def make_phrase_suspect_nomatch_y(info: Properties_Phrase) -> str:
+    phrase = f"{info.nickname}의 Y-STR 디엔에이형은 위 연관 건에서 검출된 Y-STR 디엔에이형과 일치하지 않음.\r\n"
     return phrase
 
 
-def make_phrase_suspect_nocomparable(info: dict) -> str:
+def make_phrase_suspect_nocomparable(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = input_comparison_case()
-    phrase = f"{info['nickname_match']}의 디엔에이형은 연관 건인 “{request_scas}({request_date}, " \
+    phrase = f"{info.nickname}의 디엔에이형은 연관 건인 “{request_scas}({request_date}, " \
              f"국립과학수사연구원 접수번호 {request_number})호”에서 " \
-             f"{info['gender']} 디엔에이형이 검출되지 않았으므로 대조할 수 없음.\r\n"
+             f"{info.gender} 디엔에이형이 검출되지 않았으므로 대조할 수 없음.\r\n"
     return phrase
 
 
-def make_phrase_suspect_nocomparable_y(info: dict) -> str:
-    phrase = f"{info['nickname_match']}의 Y-STR 디엔에이형은 위 연관 건에서 " \
+def make_phrase_suspect_nocomparable_y(info: Properties_Phrase) -> str:
+    phrase = f"{info.nickname}의 Y-STR 디엔에이형은 위 연관 건에서 " \
              f"Y-STR 디엔에이형이 검출되지 않았으므로 대조할 수 없음.\r\n"
     return phrase
 
 
-def make_phrase_paternity_match(info: dict) -> str:
+def make_phrase_paternity_match(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = input_comparison_case()
-    phrase = f"{info['nickname_match']}의 디엔에이형을 연관 건인 '{request_scas}({request_date}, " \
+    phrase = f"{info.nickname}의 디엔에이형을 연관 건인 '{request_scas}({request_date}, " \
                  f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 ***의 디엔에이형과 대조 비교시, " \
                  f"친자관계임이 인정됨.\r\n* 이와 같이 친자관계가 성립될 확률은 23 STR 디엔에이형에서 99.9999%임.\r\n"
     return phrase
 
 
-def make_phrase_paternity_nomatch(info: dict) -> str:
+def make_phrase_paternity_nomatch(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = input_comparison_case()
-    phrase = f"{info['nickname_match']}의 디엔에이형을 연관 건인 '{request_scas}({request_date}), " \
+    phrase = f"{info.nickname}의 디엔에이형을 연관 건인 '{request_scas}({request_date}), " \
              f"국립과학수사연구원 접수번호 {request_number})호'에서 검출된 ***의 디엔에이형과 대조 비교시, " \
              f"친자관계임이 인정되지 않음.\r\n"
     return phrase
 
 
-def make_phrase_simple_c(info: dict) -> str:
-    phrase = f"{info['ln_match']}에서 {info['gender']}의 디엔에이형이 검출되고, " \
+def make_phrase_simple_c(info: Properties_Phrase) -> str:
+    phrase = f"{info.text_evidence}에서 {info.gender}의 디엔에이형이 검출되고, " \
              f"현재까지 수록된 “디엔에이신원확인정보 데이터베이스”에서 검색한 결과 " \
              f"일치 건(범죄 현장 등, 구속피의자 등 및 수형인 등) 없음.\r\n"
     return phrase

@@ -1,9 +1,12 @@
+import logging
 import pandas as pd
 import re
 import os
 from . import NFS_DATAFRAME as NFS_DF
 from . import NFS_STRPROFILE as NFS_SP
 from typing import Self, Optional, Literal
+
+logger = logging.getLogger(__name__)
 
 class NFSProfileDataManager:
     """프로필 데이터 관리 클래스
@@ -70,12 +73,15 @@ class NFSProfileDataManager:
     TA_THRESHOLD = 2  # 혼합 프로필 판단시 Tri-allelic 허용 개수.
 
     def __init__(self, kit: Literal["STR", "YSTR"] = "STR"):
+        logger.info(f"NFSProfileDataManager 초기화 시작 (kit={kit})")
         self.df_profile = pd.DataFrame()
         self.kit:Literal["STR", "YSTR"] = kit
         # 모듈 파일이 있는 디렉토리를 기준으로 CSV 파일 경로 설정
         module_dir = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(module_dir, "allele_frequency.csv")
-        self.allele_frequency = pd.read_csv(csv_path) 
+        logger.debug(f"allele_frequency.csv 로딩 중: {csv_path}")
+        self.allele_frequency = pd.read_csv(csv_path)
+        logger.info(f"NFSProfileDataManager 초기화 완료 (kit={kit}, allele_frequency rows={len(self.allele_frequency)})") 
 
     def load_combined_result_from_tomato(self, path: str) -> None:
         """Tomato 엑셀 파일의 Cominbed_result를 데이터프레임으로 불러오고 분석이 용이한 형태로 가공한다.
@@ -83,6 +89,7 @@ class NFSProfileDataManager:
         Args:
             path(str): 읽어올 토마토 파일 경로
         """
+        logger.info(f"Tomato 파일 로딩 시작: {path}")
 
         def analyze_status_combined() -> None:
             """프로필 데이터가 합쳐진 상태를 분석해서 정리"""
@@ -144,8 +151,10 @@ class NFSProfileDataManager:
             return df
 
         df_tomato = pd.read_excel(path, sheet_name="CombinedResult", header=1)
+        logger.debug(f"엑셀 파일 읽기 완료 (rows={len(df_tomato)})")
         analyze_status_combined()
         self.df_profile = preprocess_df_tomato(df_tomato)
+        logger.info(f"Tomato 파일 로딩 완료 (최종 프로필 수={len(self.df_profile)})")
 
     def export_df_in_set(self, STR_20: bool = False) -> pd.DataFrame:
         """STR탭에서 데이터 분석을 위해 좌위 정보를 str에서 set로 변환해서 데이터프레임 반환
@@ -225,11 +234,14 @@ class NFSProfileDataManager:
 
     def filter_by_codecase(self, code_case:str) -> Optional[Self]:
         """접수번호로 프로필 데이터를 필터하고 프로필 데이터매니저를 반환한다"""
-        
+        logger.debug(f"접수번호로 필터링 시작 (code_case={code_case})")
+
         try:
             df_profile_by_codecase = self.df_profile.loc[self.df_profile['접수번호']==code_case, :].reset_index(drop=True)
-            return self._get_instance(kit=self.kit, df_profile=df_profile_by_codecase)      
+            logger.info(f"필터링 완료 (code_case={code_case}, 프로필 수={len(df_profile_by_codecase)})")
+            return self._get_instance(kit=self.kit, df_profile=df_profile_by_codecase)
         except KeyError as e:
+            logger.error(f"KeyError: {e} - {code_case}의 증거물 정보가 데이터프레임에 존재하지 않습니다.")
             print(f"{e} : {code_case}의 증거물 정보가 데이터프레임에 존재하지 않습니다.")
         
         
@@ -253,10 +265,9 @@ class NFSProfileDataManager:
         amelogenin = self.df_profile[
             self.df_profile["감정물번호"] == code_evidence
         ].iloc[0]["AMEL"]
-        if amelogenin == "X":
-            return "여성"
-        else:
-            return "남성"
+        gender = "여성" if amelogenin == "X" else "남성"
+        logger.debug(f"성별 추출 완료 (code_evidence={code_evidence}, gender={gender})")
+        return gender
 
     def calculate_likelihood_from_profile(self, code_evidence: str) -> tuple:
         """입력받은 감정물 번호에 해당하는 프로필의 개인식별지수를 계산하여 반환한다
@@ -265,6 +276,7 @@ class NFSProfileDataManager:
         Returns:
             str: 감정서 폼으로 쓰여진 개인식별지수, 1.00x10^지수
         """
+        logger.debug(f"개인식별지수 계산 시작 (code_evidence={code_evidence})")
         prob_match = 1.0
         list_marker = self.DICT_MARKERS["GF/PPF"][:-3]
         profile = self.df_profile[self.df_profile["감정물번호"] == code_evidence].iloc[
@@ -297,7 +309,9 @@ class NFSProfileDataManager:
         text_prob = (
             text_prob[:3] + text_prob[4:]
         )  # 4.08e+10 -> 4.0e+10 버림 연산을 대체.
-        return tuple(text_prob.split("e+"))
+        result = tuple(text_prob.split("e+"))
+        logger.info(f"개인식별지수 계산 완료 (code_evidence={code_evidence}, LR={result[0]}x10^{result[1]})")
+        return result
 
     def export_to_str(
         self, code_evidence: str, list_marker: list, y23: bool = True
@@ -468,6 +482,7 @@ class NFSProfileDataManager:
             >>> print(profile.id)
             S001
         """
+        logger.debug(f"STRProfile 생성 시작 (samplename={samplename}, STR_20={STR_20})")
         # 마커 리스트 결정
         list_markers = (
             self.DICT_MARKERS[self.kit][:-3] if STR_20 else self.DICT_MARKERS[self.kit]
@@ -476,6 +491,7 @@ class NFSProfileDataManager:
         # 샘플 데이터 조회 (예외 처리 추가)
         sample_data = self.df_profile[self.df_profile["감정물번호"] == samplename]
         if sample_data.empty:
+            logger.error(f"ValueError: 샘플 '{samplename}'을 찾을 수 없습니다.")
             raise ValueError(f"샘플 '{samplename}'을 찾을 수 없습니다.")
 
         dict_profile = sample_data.fillna("").iloc[0].to_dict()
@@ -487,6 +503,7 @@ class NFSProfileDataManager:
             if value:  # 더 pythonic한 빈 문자열 체크
                 dict_profile_set[marker] = set(value.split("-"))
 
+        logger.debug(f"STRProfile 생성 완료 (samplename={samplename}, 좌위 수={len(dict_profile_set)})")
         return NFS_SP.STRProfile(id=samplename, profile=dict_profile_set)
 
     def generate_empty_STRProfile(self, samplename="") -> NFS_SP.STRProfile:
@@ -610,11 +627,14 @@ class NFSProfileDataManager:
             >>> analyzer.check_inclusion("single_sample", "different_sample")
             False
         """
+        logger.debug(f"포함 확인 시작 (target={target_samplename}, query={query_samplename})")
         # STR 프로필 생성 (20개 마커 사용)
         target_profile = self.generate_STRProfile(target_samplename, STR_20=True)
         query_profile = self.generate_STRProfile(query_samplename, STR_20=True)
         # 포함 관계 확인
-        return target_profile.check_inclusion(query_profile)
+        result = target_profile.check_inclusion(query_profile)
+        logger.info(f"포함 확인 완료 (target={target_samplename}, query={query_samplename}, result={result})")
+        return result
 
     def check_match(self, target_samplename: str, query_samplename: str) -> bool:
         """
@@ -636,12 +656,15 @@ class NFSProfileDataManager:
             >>> analyzer.check_match("sample1", "sample1_duplicate")
             True
         """
+        logger.debug(f"일치 확인 시작 (target={target_samplename}, query={query_samplename})")
         # STR 프로필 생성 (20개 마커 사용)
         target_profile = self.generate_STRProfile(target_samplename, STR_20=True)
         query_profile = self.generate_STRProfile(query_samplename, STR_20=True)
 
         # 일치 여부 확인
-        return target_profile.check_match(query_profile)
+        result = target_profile.check_match(query_profile)
+        logger.info(f"일치 확인 완료 (target={target_samplename}, query={query_samplename}, result={result})")
+        return result
 
     def generate_mix_profile(self, samplenames: list) -> NFS_SP.STRProfile:
         """
@@ -663,8 +686,10 @@ class NFSProfileDataManager:
             >>> mixed = analyzer.generate_mix_profile(["sample1", "sample2", "sample3"])
             >>> print(len(mixed.profile))  # 결합된 프로필의 마커 수
         """
+        logger.info(f"혼합 프로필 생성 시작 (샘플 수={len(samplenames)})")
         # 입력 유효성 검사
         if not samplenames:
+            logger.error("ValueError: 혼합할 샘플명 리스트가 비어있습니다.")
             raise ValueError("혼합할 샘플명 리스트가 비어있습니다.")
 
         # 빈 프로필로 시작
@@ -672,7 +697,9 @@ class NFSProfileDataManager:
 
         # 각 샘플의 프로필을 순차적으로 결합
         for samplename in samplenames:
+            logger.debug(f"샘플 병합 중: {samplename}")
             element_profile = self.generate_STRProfile(samplename)
             mixed_profile = mixed_profile.union_profiles(element_profile)
 
+        logger.info(f"혼합 프로필 생성 완료 (샘플 수={len(samplenames)}, 마커 수={len(mixed_profile.profile)})")
         return mixed_profile
