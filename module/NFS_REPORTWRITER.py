@@ -36,14 +36,24 @@ class NFSReportWriter():
         self.phrases_result:list = []
         logger.debug("NFSReportWriter 초기화 완료")
 
-        self.switch_kit:dict = {
+    @property
+    def switch_kit(self) -> dict:
+        """키트별 변수 매핑을 동적으로 반환하는 property.
+
+        재할당 문제 해결: self.code_categorized 등이 재할당되어도
+        항상 최신 값을 참조하도록 property로 구현.
+
+        Returns:
+            STR/YSTR 키트별 변수 매핑 딕셔너리
+        """
+        return {
             "STR": {
                 "code_categorized": self.code_categorized,
                 "profilemanager": self.report_data.pm_str,
                 "info_indexed" : self.categorized_info,
                 "profile_blocks_ref" : self.profile_blocks_ref,
                 "profile_blocks" : self.profile_blocks,
-                "colname_nickname" : "대조_이름", 
+                "colname_nickname" : "대조_이름",
                 "colname_reported" : "기재_여부",
                 "colname_text_evidence" : "표기번호"
             },
@@ -89,8 +99,8 @@ class NFSReportWriter():
         self.code_categorized = categorize_code(df=evidenceinfo_str)
 
         # MultiIndex 설정 (기존 groupby 대체)
-        self.categorized_info = evidenceinfo_str.reset_index() # 숫자 인덱스를 보존. index 칼럼으로.
-        self.categorized_info = evidenceinfo_str.set_index(["코드", "프로필_유형"])
+        # reset_index()로 원본 인덱스를 "index" 컬럼으로 보존한 뒤 MultiIndex 설정
+        self.categorized_info = evidenceinfo_str.reset_index().set_index(["코드", "프로필_유형"])
         logger.info(f"STR 프로필 분류 완료 (유형별: {dict((k, len(v)) for k, v in self.code_categorized.items())})")
 
         # Y-STR 데이터 처리
@@ -99,8 +109,8 @@ class NFSReportWriter():
         self.code_categorized_ystr = categorize_code(evidenceinfo_ystr, column_prefix="Y_")
 
         # MultiIndex 설정 (기존 groupby 대체)
-        self.categorized_info_ystr = evidenceinfo_ystr.reset_index() # 숫자 인덱스를 보존
-        self.categorized_info_ystr = evidenceinfo_ystr.set_index(["Y_코드", "Y_프로필_유형"])
+        # reset_index()로 원본 인덱스를 "index" 컬럼으로 보존한 뒤 MultiIndex 설정
+        self.categorized_info_ystr = evidenceinfo_ystr.reset_index().set_index(["Y_코드", "Y_프로필_유형"])
         self.categorized_info_ystr.sort_index(inplace=True)  # 조회 성능 향상을 위한 정렬
         logger.info(f"YSTR 프로필 분류 완료 (유형별: {dict((k, len(v)) for k, v in self.code_categorized_ystr.items())})")
 
@@ -121,9 +131,12 @@ class NFSReportWriter():
         예시 : list_samplenames: ["증1호", "증2호", "증3호"], reaction=False -> ["증1호~증3호"]
         """
         logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+        logger.debug(f"입력 증거물 ID: {list_id}")
         kit_data = self.switch_kit[kit]
         df_target = self.report_data.evidenceinfo
-        df_target = df_target[df_target[kit_data["colname_text_evidence"]] != "미기재", :].copy()
+        df_target = df_target.loc[df_target[kit_data["colname_reported"]] != "미기재", :].copy()
+        
+        logger.debug(f"미기재 제외 후 데이터 크기: {len(df_target)}")
         df_target['표기번호'] = df_target[kit_data["colname_text_evidence"]] 
 
         # 다음 감정물번호를 나타내는 칼럼 생성
@@ -131,12 +144,14 @@ class NFSReportWriter():
         # 해당 증거물명의 데이터만 추출
         df_target = df_target.loc[df_target["감정물번호"].isin(list_id)]
         df_target = df_target.reset_index(drop=True)
+        logger.debug(f"증거물 ID로 필터링 후 데이터 크기: {len(df_target)}")
         # 반응실험결과 칼럼 생성
         equivalent_reaction = (
             ""  # 반응실험 결과가 모두 같을 때 모두 ~반응 양성 하나로 적어주기 위한 변수
         )
 
         if reaction:
+            logger.debug("체액 반응 정보 처리 시작")
             df_target.loc[:, "반응실험결과"] = (
                 df_target["타액_반응"].apply(
                     lambda x: "타액반응 " + x if x != "실험 안함" else ""
@@ -164,11 +179,13 @@ class NFSReportWriter():
             if (
                 1 < len(df_target) == df_target["반응실험결과"].value_counts().iloc[0]
             ):  # 모두 반응실험 결과가 같으면
-                equivalent_reaction = df_target.loc[
+                equivalent_reaction = str(df_target.loc[
                     df_target.index[-1], "반응실험결과"
-                ].replace("(", "(모두 ")
+                ]).replace("(", "(모두 ")
+                logger.debug(f"동일 반응 감지: {equivalent_reaction}")
                 df_target.loc[:, "반응실험결과"] = ""
             df_target["표기번호"] = df_target["표기번호"] + df_target["반응실험결과"]
+            logger.debug("체액 반응 정보 처리 완료")
 
         # 표기번호에 괄호가 있는지 여부 칼럼 생성
         df_target["괄호여부"] = df_target["표기번호"].str.contains(
@@ -176,14 +193,18 @@ class NFSReportWriter():
         )
         # 필요한 데이터만 정리
         df_target = df_target[["감정물번호", "감정물번호_다음", "표기번호", "괄호여부"]]
+
         # 데이터가 하나일 때
         if len(df_target) == 1:
+            logger.debug("단일 증거물 처리")
             linked_num = df_target.iloc[0]["표기번호"]
         elif len(df_target) == 2:
+            logger.debug("2개 증거물 처리 ('및'로 연결)")
             linked_num = (
                 df_target.iloc[0]["표기번호"] + " 및 " + df_target.iloc[1]["표기번호"]
             )
         else:
+            logger.debug(f"3개 이상 증거물 처리 (총 {len(df_target)}개, 연속 번호 그룹화 진행)")
             stack = []
             chains = []
             stack.append(df_target.iloc[0]["표기번호"])
@@ -202,16 +223,19 @@ class NFSReportWriter():
                 next_samplename = row["감정물번호_다음"]
                 prev_parentheses = row["괄호여부"]
             chains.append(stack)
+            logger.debug(f"연속 번호 그룹 수: {len(chains)}, 그룹별 크기: {[len(c) for c in chains]}")
             list_text_chain = []
             for chain in chains:
                 if len(chain) < 3:
                     text_chain = ", ".join(chain)
+                    logger.debug(f"그룹 처리 (개별): {text_chain}")
                 else:
                     text_chain = chain[0] + "~" + chain[-1]
+                    logger.debug(f"그룹 처리 (범위): {text_chain}")
                 list_text_chain.append(text_chain)
             linked_num = ", ".join(list_text_chain)
         result = linked_num + equivalent_reaction
-        logger.debug(f"증거물 텍스트 생성 완료: {result[:50]}...")  # 최대 50자까지만 로그
+        logger.debug(f"증거물 텍스트 생성 완료: {result[:100] if len(result) <= 100 else result[:100] + '...'}")
         return result
 
     # ==================== Refactored Methods (v2) ====================
@@ -237,11 +261,14 @@ class NFSReportWriter():
         Returns:
             필터링 및 전처리된 DataFrame
         """
+        logger.debug(f"[v2] 증거물 필터링 시작 (kit={kit}, 입력 ID 수={len(list_id)})")
         kit_data = self.switch_kit[kit]
         df = self.report_data.evidenceinfo
 
         # 1단계: 미기재 제외
+        original_size = len(df)
         df = df[df[kit_data["colname_text_evidence"]] != "미기재"].copy()
+        logger.debug(f"[v2] 미기재 제외 (전: {original_size}, 후: {len(df)})")
 
         # 2단계: 표기번호 컬럼 추가
         df['표기번호'] = df[kit_data["colname_text_evidence"]]
@@ -255,6 +282,7 @@ class NFSReportWriter():
 
         # 4단계: 지정된 감정물번호만 필터링
         df = df[df["감정물번호"].isin(list_id)]
+        logger.debug(f"[v2] ID 필터링 후 데이터 크기: {len(df)}")
 
         return df.reset_index(drop=True)
 
@@ -317,6 +345,7 @@ class NFSReportWriter():
         Returns:
             (반응 정보가 추가된 DataFrame, 동일 반응 문자열)
         """
+        logger.debug(f"[v2] 체액 반응 정보 처리 시작 (데이터 수={len(df)})")
         # 각 반응 유형 처리
         reactions = []
         for col in ["타액_반응", "정액_반응", "혈흔_반응"]:
@@ -331,10 +360,12 @@ class NFSReportWriter():
         # 모두 같은 반응이면 한 번만 표시
         equivalent_reaction = self._check_equivalent_reaction(df)
         if equivalent_reaction:
+            logger.debug(f"[v2] 동일 반응 감지: {equivalent_reaction}")
             df["반응실험결과"] = ""
 
         # 표기번호에 반응 추가
         df["표기번호"] = df["표기번호"] + df["반응실험결과"]
+        logger.debug("[v2] 체액 반응 정보 처리 완료")
 
         return df, equivalent_reaction
 
@@ -348,6 +379,7 @@ class NFSReportWriter():
         Returns:
             그룹화된 표기번호 리스트 (예: [["증1호", "증2호", "증3호"], ["증5호"]])
         """
+        logger.debug(f"[v2] 연속 번호 그룹화 시작 (데이터 수={len(df)})")
         if len(df) == 0:
             return []
 
@@ -375,6 +407,7 @@ class NFSReportWriter():
                 current_chain = [row["표기번호"]]
 
         chains.append(current_chain)
+        logger.debug(f"[v2] 연속 번호 그룹화 완료 (그룹 수={len(chains)}, 그룹별 크기={[len(c) for c in chains]})")
         return chains
 
     def _format_evidence_text(self, chains: list[list[str]], equivalent_reaction: str = "") -> str:
@@ -388,18 +421,25 @@ class NFSReportWriter():
         Returns:
             포맷팅된 증거물 문자열 (예: "증1호~증3호, 증5호")
         """
+        logger.debug(f"[v2] 증거물 텍스트 포맷팅 시작 (그룹 수={len(chains)})")
         formatted_chains = []
 
-        for chain in chains:
+        for idx, chain in enumerate(chains, 1):
             if len(chain) >= self.MIN_CHAIN_LENGTH:
                 # 3개 이상: "증1호~증5호"
-                formatted_chains.append(f"{chain[0]}~{chain[-1]}")
+                formatted = f"{chain[0]}~{chain[-1]}"
+                logger.debug(f"[v2] 그룹 {idx} 포맷팅 (범위): {formatted}")
+                formatted_chains.append(formatted)
             else:
                 # 1-2개: "증1호, 증2호"
-                formatted_chains.append(", ".join(chain))
+                formatted = ", ".join(chain)
+                logger.debug(f"[v2] 그룹 {idx} 포맷팅 (개별): {formatted}")
+                formatted_chains.append(formatted)
 
         result = ", ".join(formatted_chains)
-        return result + equivalent_reaction
+        final_result = result + equivalent_reaction
+        logger.debug(f"[v2] 증거물 텍스트 포맷팅 완료: {final_result[:100] if len(final_result) <= 100 else final_result[:100] + '...'}")
+        return final_result
 
     def _create_text_evidence_v2(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
         """
@@ -429,25 +469,37 @@ class NFSReportWriter():
             >>> writer._create_text_evidence_v2(["2023-D-1-1"], reaction=True)
             "증1호(타액반응 양성)"
         """
+        logger.debug(f"[v2] 증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+
         # 1. 데이터 필터링
         df = self._filter_evidence_by_ids(list_id, kit)
 
         # 2. 특수 케이스 처리
         if len(df) == 0:
+            logger.debug("[v2] 빈 데이터프레임 (결과: 빈 문자열)")
             return ""
         if len(df) == 1:
             # 단일 증거물
+            logger.debug("[v2] 단일 증거물 처리")
             if reaction:
                 df, equiv = self._add_reaction_info(df)
-                return df.iloc[0]["표기번호"] + equiv
-            return df.iloc[0]["표기번호"]
+                result = df.iloc[0]["표기번호"] + equiv
+                logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+                return result
+            result = df.iloc[0]["표기번호"]
+            logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+            return result
         if len(df) == 2:
             # 두 개 증거물: "및"로 연결
+            logger.debug("[v2] 2개 증거물 처리 ('및'로 연결)")
             if reaction:
                 df, equiv = self._add_reaction_info(df)
-            return f"{df.iloc[0]['표기번호']} 및 {df.iloc[1]['표기번호']}"
+            result = f"{df.iloc[0]['표기번호']} 및 {df.iloc[1]['표기번호']}"
+            logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+            return result
 
         # 3. 체액 반응 처리
+        logger.debug(f"[v2] 3개 이상 증거물 처리 (총 {len(df)}개)")
         equivalent_reaction = ""
         if reaction:
             df, equivalent_reaction = self._add_reaction_info(df)
@@ -456,7 +508,9 @@ class NFSReportWriter():
         chains = self._group_consecutive_evidence(df)
 
         # 5. 최종 문자열 생성
-        return self._format_evidence_text(chains, equivalent_reaction)
+        result = self._format_evidence_text(chains, equivalent_reaction)
+        logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+        return result
 
     # ==================== End of Refactored Methods ====================
 
@@ -468,19 +522,23 @@ class NFSReportWriter():
         var_kit = self.switch_kit[kit]
         # 대조
         if type_profile in var_kit["code_categorized"].keys():
-            for code in var_kit["code_categorized"][type_profile]:
-                logger.debug(f"프로필 처리 중 (code={code}, type={type_profile})")
-                info_ref = var_kit['info_indexed'].loc[(code, type_profile)]
+            logger.info(f"{type_profile} 프로필 {len(var_kit['code_categorized'][type_profile])}개 발견")
+            for idx, code in enumerate(var_kit["code_categorized"][type_profile], 1):
+                logger.info(f"[{idx}/{len(var_kit['code_categorized'][type_profile])}] 프로필 처리 중 (code={code}, type={type_profile})")
+                info_ref = var_kit['info_indexed'].loc[[(code, type_profile)], :]
+                logger.debug(f"참조 정보 행 수: {len(info_ref) if isinstance(info_ref, pd.DataFrame) else 1}")
                 try: #예외처리를 이렇게 써도 되나?
-                    info_match = var_kit['info_indexed'].loc[(code, "일반")]
+                    info_match = var_kit['info_indexed'].loc[[(code, "일반")], :]
+                    logger.debug(f"일치 정보 행 수: {len(info_match) if isinstance(info_match, pd.DataFrame) else 1}")
                 except KeyError as e:
-                    logger.warning(f"KeyError: {e} - 매치되는 그룹바이가 없습니다. 빈 데이터프레임을 반환합니다.")
+                    logger.warning(f"KeyError: {e} - 매치되는 일반 프로필이 없습니다. 빈 데이터프레임을 반환합니다.")
                     print(f"{e}: 매치되는 그룹바이가 없습니다. 빈 데이터프레임을 반환합니다.")
                     info_match = pd.DataFrame({})
                 id_ref = info_ref.iloc[0]["감정물번호"] # 대조 데이터가 하나라고 가정
-                nickname_ref = info_ref.iloc[0][var_kit["colname_nickname"]]
-                logger.debug(f"참조 프로필 정보 (id={id_ref}, nickname={nickname_ref})")
+                nickname_ref =str(info_ref.iloc[0][var_kit["colname_nickname"]])
+                logger.info(f"참조 프로필 정보 (id={id_ref}, nickname={nickname_ref})")
                 if type_profile=="대조": # 대조시료의 비교 문구의 경우 프로필 블록을 별개로 생성한다.
+                    logger.debug("대조 프로필 블록 생성 시작")
                     linked_text_ref = self._create_text_evidence(
                         list_id=[id_ref], kit=kit
                     )
@@ -491,27 +549,40 @@ class NFSReportWriter():
                         id_evidence=id_ref
                     )
                     var_kit["profile_blocks_ref"].append(block_ref)
+                    logger.debug(f"대조 프로필 블록 생성 완료 (text={linked_text_ref})")
                 elif type_profile=="대표": # 대표시료의 비교 문구의 경우 대표프로필과 일치프로필을 합쳐서 처리한다.
+                    logger.debug("대표 프로필과 일치 프로필 병합 시작")
                     info_match = pd.concat([info_ref, info_match]).sort_values(by='index')
+                    logger.debug(f"병합 후 총 행 수: {len(info_match)}")
                 
                 # 문장 생성시 필요한 정보를 정리
                 if kit=="STR":
+                    logger.debug("성별 및 개인식별지수 추출 시작")
                     gender=self.report_data.pm_str.extract_gender_from_profile(id_ref) if self.report_data.pm_str is not None else ""
                     lr = self.report_data.pm_str.calculate_likelihood_from_profile(id_ref) if self.report_data.pm_str is not None else ("0","0")
+                    logger.debug(f"성별: {gender}, 개인식별지수: {lr[0]}x10^{lr[1]}")
+                else:
+                    gender = ""
+                    lr = ("0", "0")
+                logger.debug(f"증거물 텍스트 생성 시작 (증거물 수={len(info_match)})")
+                text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
                 properties = Properties_Phrase(
                     gender=gender,
                     likelihoodratio=lr,
-                    text_evidence=self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True),
+                    text_evidence=text_evidence,
                     nickname=nickname_ref) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
+                logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
                 # 문장생성
                 try:
+                    logger.debug("감정서 문구 생성 중 (phraser 호출)")
                     phrase = phraser(properties)
                     self.phrases_result.append(phrase)
-                    logger.debug(f"문구 생성 완료: {phrase[:50]}...")  # 최대 50자까지만 로그
+                    logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
                 except TypeError as e: #TypeError로 모두 잡을 수 있을까?
                     logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
                     print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
                 # 일치 프로필 블록 생성
+                logger.debug("일치 프로필 블록 생성 시작")
                 linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
                 block_match = Block_Profile(
                     idx_first=info_match.iloc[0]["index"],
@@ -520,7 +591,10 @@ class NFSReportWriter():
                     id_evidence=id_ref
                 )
                 var_kit["profile_blocks"].append(block_match)
-        logger.info(f"프로필 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
+                logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
+        else:
+            logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
+        logger.info(f"프로필 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
     
     def make_contents_without_profile(self, phraser: Callable, type_profile:Literal["ND", "NC"], kit:Literal["STR", "YSTR"]="STR") -> None:
         """
@@ -529,21 +603,31 @@ class NFSReportWriter():
         logger.info(f"프로필 없는 문구 생성 시작 (type_profile={type_profile}, kit={kit})")
         var_kit = self.switch_kit[kit]
         if type_profile in var_kit["code_categorized"].keys():
-            info_match = var_kit['info_indexed'].loc[(type_profile, "일반")]
-            logger.debug(f"처리할 증거물 수: {len(info_match)}")
+            info_match = var_kit['info_indexed'].loc[[(type_profile, "일반")], :]
+            evidence_count = len(info_match) if isinstance(info_match, pd.DataFrame) else 1
+            logger.info(f"{type_profile} 프로필 {evidence_count}개 발견")
+            logger.debug(f"처리할 증거물 ID: {list(info_match['감정물번호'])}")
+
+            logger.debug("증거물 텍스트 생성 중 (반응 포함)")
+            text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
             properties = Properties_Phrase(
                     gender="",
                     likelihoodratio=("",""),
-                    text_evidence=self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True),
+                    text_evidence=text_evidence,
                     nickname=type_profile) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
+            logger.debug(f"Properties 생성 완료 (type={type_profile}, evidence={text_evidence[:50]}...)")
+
             try:
+                logger.debug("감정서 문구 생성 중 (phraser 호출)")
                 phrase = phraser(properties)
                 self.phrases_result.append(phrase)
-                logger.debug(f"문구 생성 완료: {phrase[:50]}...")  # 최대 50자까지만 로그
+                logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
             except TypeError as e: #TypeError로 모두 잡을 수 있을까?
                 logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
                 print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
+
             # 프로필 블록 생성
+            logger.debug("프로필 블록 생성 시작")
             linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
             block_match = Block_Profile(
                 idx_first=info_match.iloc[0]["index"],
@@ -552,6 +636,9 @@ class NFSReportWriter():
                 id_evidence=type_profile
             )
             var_kit["profile_blocks"].append(block_match)
-        logger.info(f"프로필 없는 문구 생성 완료 (type_profile={type_profile}, kit={kit})")
+            logger.debug(f"프로필 블록 생성 완료 (text={linked_text_match})")
+        else:
+            logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
+        logger.info(f"프로필 없는 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
 
 

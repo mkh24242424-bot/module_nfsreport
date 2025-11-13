@@ -278,7 +278,7 @@ class NFSProfileDataManager:
         """
         logger.debug(f"개인식별지수 계산 시작 (code_evidence={code_evidence})")
         prob_match = 1.0
-        list_marker = self.DICT_MARKERS["GF/PPF"][:-3]
+        list_marker = self.DICT_MARKERS["STR"][:-3]
         profile = self.df_profile[self.df_profile["감정물번호"] == code_evidence].iloc[
             0
         ]
