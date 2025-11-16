@@ -432,6 +432,32 @@ class NFSReportWriter():
         else:
             return "", ("0", "0")
 
+    def _call_phraser_with_error_handling(self, phraser: Callable, properties: Properties_Phrase) -> str:
+        """Phraser 함수 호출 및 에러 처리"""
+        try:
+            logger.debug("감정서 문구 생성 중 (phraser 호출)")
+            phrase = phraser(properties)
+            self.phrases_result.append(phrase)
+            logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
+            return phrase
+        except TypeError as e:
+            logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
+            raise TemplateError(phraser.__name__, e) from e
+
+    def _create_and_append_block(self, info_match: pd.DataFrame, id_evidence: str, var_kit: dict,
+                                  kit: str, nickname: str = "") -> None:
+        """프로필 블록을 생성하여 var_kit에 추가"""
+        logger.debug("프로필 블록 생성 시작")
+        linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
+        block_match = Block_Profile(
+            idx_first=info_match.iloc[0]["index"],
+            nickname=nickname,
+            text_evidence=linked_text_match,
+            id_evidence=id_evidence
+        )
+        var_kit["profile_blocks"].append(block_match)
+        logger.debug(f"프로필 블록 생성 완료 (text={linked_text_match})")
+
     def _generate_phrase_and_blocks(self, info_match: pd.DataFrame, id_ref: str, nickname_ref: str,
                                      var_kit: dict, kit: str, phraser: Callable,
                                      gender: str, lr: tuple) -> None:
@@ -448,26 +474,10 @@ class NFSReportWriter():
             logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
 
             # 문장생성
-            try:
-                logger.debug("감정서 문구 생성 중 (phraser 호출)")
-                phrase = phraser(properties)
-                self.phrases_result.append(phrase)
-                logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-            except TypeError as e:
-                logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
-                raise TemplateError(phraser.__name__, e) from e
+            self._call_phraser_with_error_handling(phraser, properties)
 
             # 일치 프로필 블록 생성
-            logger.debug("일치 프로필 블록 생성 시작")
-            linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
-            block_match = Block_Profile(
-                idx_first=info_match.iloc[0]["index"],
-                nickname="",
-                text_evidence=linked_text_match,
-                id_evidence=id_ref
-            )
-            var_kit["profile_blocks"].append(block_match)
-            logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
+            self._create_and_append_block(info_match, id_ref, var_kit, kit)
 
     def make_contents_with_profile(self, phraser: Callable, type_profile:Literal["대표", "대조"], kit:Literal["STR", "YSTR"]="STR") -> None:
         """
@@ -526,27 +536,11 @@ class NFSReportWriter():
                     nickname=type_profile) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
             logger.debug(f"Properties 생성 완료 (type={type_profile}, evidence={text_evidence[:50]}...)")
 
-            try:
-                logger.debug("감정서 문구 생성 중 (phraser 호출)")
-                phrase = phraser(properties)
-                self.phrases_result.append(phrase)
-                logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-            except TypeError as e:
-                logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
-                raise TemplateError(phraser.__name__, e) from e
+            # 문장생성
+            self._call_phraser_with_error_handling(phraser, properties)
 
             # 프로필 블록 생성
-            logger.debug("프로필 블록 생성 시작")
-
-            linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
-            block_match = Block_Profile(
-                idx_first=info_match.iloc[0]["index"],
-                nickname="",
-                text_evidence=linked_text_match,
-                id_evidence=type_profile
-            )
-            var_kit["profile_blocks"].append(block_match)
-            logger.debug(f"프로필 블록 생성 완료 (text={linked_text_match})")
+            self._create_and_append_block(info_match, type_profile, var_kit, kit)
         except KeyError as e:
             logger.info(f"{e}: {type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
         logger.info(f"프로필 없는 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
