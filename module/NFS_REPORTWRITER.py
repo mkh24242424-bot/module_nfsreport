@@ -565,33 +565,34 @@ class NFSReportWriter():
                     gender = ""
                     lr = ("0", "0")
                 logger.debug(f"증거물 텍스트 생성 시작 (증거물 수={len(info_match)})")
-                text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
-                properties = Properties_Phrase(
-                    gender=gender,
-                    likelihoodratio=lr,
-                    text_evidence=text_evidence,
-                    nickname=nickname_ref) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
-                logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
-                # 문장생성
-                try:
-                    logger.debug("감정서 문구 생성 중 (phraser 호출)")
-                    phrase = phraser(properties)
-                    self.phrases_result.append(phrase)
-                    logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-                except TypeError as e: #TypeError로 모두 잡을 수 있을까?
-                    logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
-                    print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
-                # 일치 프로필 블록 생성
-                logger.debug("일치 프로필 블록 생성 시작")
-                linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
-                block_match = Block_Profile(
-                    idx_first=info_match.iloc[0]["index"],
-                    nickname="",
-                    text_evidence=linked_text_match,
-                    id_evidence=id_ref
-                )
-                var_kit["profile_blocks"].append(block_match)
-                logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
+                if len(info_match):
+                    text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
+                    properties = Properties_Phrase(
+                        gender=gender,
+                        likelihoodratio=lr,
+                        text_evidence=text_evidence,
+                        nickname=nickname_ref) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
+                    logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
+                    # 문장생성
+                    try:
+                        logger.debug("감정서 문구 생성 중 (phraser 호출)")
+                        phrase = phraser(properties)
+                        self.phrases_result.append(phrase)
+                        logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
+                    except TypeError as e: #TypeError로 모두 잡을 수 있을까?
+                        logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
+                        print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
+                    # 일치 프로필 블록 생성
+                    logger.debug("일치 프로필 블록 생성 시작")
+                    linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
+                    block_match = Block_Profile(
+                        idx_first=info_match.iloc[0]["index"],
+                        nickname="",
+                        text_evidence=linked_text_match,
+                        id_evidence=id_ref
+                    )
+                    var_kit["profile_blocks"].append(block_match)
+                    logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
         else:
             logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
         logger.info(f"프로필 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
@@ -602,7 +603,7 @@ class NFSReportWriter():
         """
         logger.info(f"프로필 없는 문구 생성 시작 (type_profile={type_profile}, kit={kit})")
         var_kit = self.switch_kit[kit]
-        if type_profile in var_kit["code_categorized"].keys():
+        try:
             info_match = var_kit['info_indexed'].loc[[(type_profile, "일반")], :]
             evidence_count = len(info_match) if isinstance(info_match, pd.DataFrame) else 1
             logger.info(f"{type_profile} 프로필 {evidence_count}개 발견")
@@ -628,6 +629,7 @@ class NFSReportWriter():
 
             # 프로필 블록 생성
             logger.debug("프로필 블록 생성 시작")
+            
             linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
             block_match = Block_Profile(
                 idx_first=info_match.iloc[0]["index"],
@@ -637,8 +639,8 @@ class NFSReportWriter():
             )
             var_kit["profile_blocks"].append(block_match)
             logger.debug(f"프로필 블록 생성 완료 (text={linked_text_match})")
-        else:
-            logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
+        except KeyError as e:
+            logger.info(f"{e}: {type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
         logger.info(f"프로필 없는 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
 
 

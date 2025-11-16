@@ -41,8 +41,8 @@ pm_ystr = NFS_PM.NFSProfileDataManager(kit='YSTR')
 pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
-logger.info("NFSReportInformation 객체 생성 (id_case=2025-C-6697)")
-info = NFS_RI.NFSReportInformation(id_case='2025-C-6697')
+logger.info("NFSReportInformation 객체 생성 (id_case=2025-C-6745)")
+info = NFS_RI.NFSReportInformation(id_case='2025-C-6845')
 
 logger.info("사건 정보 추출 시작")
 info.extract_caseinfo_from_df(df_caseinfo)
@@ -75,7 +75,7 @@ logger.info("NC 프로필 문구 생성 시작")
 RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nc, type_profile='NC')
 
 logger.info(f"생성된 프로필 블록 수: {len(RW.profile_blocks)}")
-print(RW.profile_blocks)
+print(RW.phrases_result)
 
 logger.info("========== 프로그램 종료 ==========")
 
