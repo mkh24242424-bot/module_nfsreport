@@ -315,6 +315,115 @@ class NFSProfileDataManager:
         logger.info(f"개인식별지수 계산 완료 (code_evidence={code_evidence}, LR={result[0]}x10^{result[1]})")
         return result
 
+    # ==================== Profile Export Helper Methods ====================
+    # export_to_str()을 지원하는 헬퍼 메서드들
+
+    def _check_mixture(self, series_profile: pd.Series, list_marker: list, y23: bool) -> bool:
+        """현재 작업중인 프로필이 혼합 프로필인지 검사
+
+        Args:
+            series_profile: 프로필 데이터 시리즈
+            list_marker: 검사할 마커 리스트
+            y23: Y-STR 마커 사용 여부
+
+        Returns:
+            bool: 혼합 프로필 여부
+        """
+        limit_allele = 1 if y23 else 2
+        cnt_ta = 0
+        for marker in list_marker:
+            alleles = series_profile[marker]
+            cnt_ta = cnt_ta + 1 if len(alleles) > limit_allele else cnt_ta
+        return cnt_ta > self.TA_THRESHOLD
+
+    def _check_special_case(self, locus: str, allele: str) -> bool:
+        """비정형 좌위값 중 허용되는 특수 케이스인지 여부를 체크
+
+        Microvariant 중 허용되는 특수한 경우들을 검사합니다.
+
+        Args:
+            locus: 좌위 (예: TH01, D2S441)
+            allele: 좌위값 (예: 9.3, 17.3)
+
+        Returns:
+            bool: 특수 케이스 여부
+        """
+        # Y-STR 마커는 모두 허용
+        if locus in self.DICT_MARKERS["Y23"]:
+            return True
+
+        # 소수점이 없으면 특수 케이스 아님
+        if "." not in allele:
+            return False
+
+        decimal_place = allele.split(".")[1]
+
+        # .2는 모두 허용
+        if decimal_place == "2":
+            return True
+
+        # 좌위별 특수 케이스
+        if locus == "TH01" and allele == "9.3":
+            return True
+        elif locus == "D2S441" and allele == "9.1":
+            return True
+        elif locus == "D1S1656" and allele in ("17.3", "18.3"):
+            return True
+        elif locus in ("Penta E", "Penta D") and decimal_place in ("2", "3"):
+            return True
+
+        return False
+
+    def _transform_set_to_list(self, set_input: set) -> list:
+        """Allele 값 집합을 정렬된 리스트로 변환
+
+        숫자형 allele는 숫자로 정렬하고, 문자형 allele는 문자로 정렬합니다.
+
+        Args:
+            set_input: Allele 값 집합
+
+        Returns:
+            정렬된 allele 리스트
+        """
+        def is_number(string: str) -> bool:
+            try:
+                float(string)
+                return True
+            except (ValueError, OverflowError):
+                return False
+
+        # 숫자형과 문자형 분리
+        num_input = list(filter(is_number, set_input))
+        num_input.sort(key=float)
+        str_input = list(filter(lambda x: not is_number(x), set_input))
+        str_input.sort()
+
+        # 문자형이 있으면 문자형 우선, 없으면 숫자형 반환
+        if str_input:
+            return str_input
+        else:
+            return [str(s) for s in num_input]
+
+    def _handle_nc_nd_profiles(self, code_evidence: str, list_marker: list) -> tuple:
+        """NC/ND 프로필 처리
+
+        Args:
+            code_evidence: 증거물 코드 ("NC" 또는 "ND")
+            list_marker: 마커 리스트
+
+        Returns:
+            tuple: (프로필 딕셔너리, 특이사항 리스트) 또는 None (NC/ND가 아닌 경우)
+        """
+        if code_evidence == "ND":
+            string_profile = {locus: "ND" for locus in list_marker}
+            str_etc = ["ND : 디엔에이형이 검출되지 않음."]
+            return string_profile, str_etc
+        elif code_evidence == "NC":
+            string_profile = {locus: "NC" for locus in list_marker}
+            str_etc = ["NC : 디엔에이형을 결정할 수 없음."]
+            return string_profile, str_etc
+        return None
+
     def export_to_str(
         self, code_evidence: str, list_marker: list, y23: bool = True
     ) -> tuple:
@@ -323,72 +432,17 @@ class NFSProfileDataManager:
         Args:
             code_evidence: 감정물 유형. e.g. 대조, 대표, NC, ND
             list_marker: 사용할 좌위 마커 리스트
-            flag_homo_duplication: homologous 좌위값을 반복된 형태로 표시할지 여부(e.g 12 -> 12-12)
+            y23: Y-STR 마커 사용 여부
+
         Returns:
             tuple: (dict, list) = (문자열로 구성된 프로필 딕셔너리, 프로필내 특이사항 리스트)
         """
+        # 1. NC/ND 프로필 처리
+        nc_nd_result = self._handle_nc_nd_profiles(code_evidence, list_marker)
+        if nc_nd_result:
+            return nc_nd_result
 
-        def check_mixture() -> bool:
-            """현재 작업중인 프로필이 혼합 프로필인지 검사
-            Returns:
-                bool: 혼합 프로필 여부
-            """
-            limit_allele = 1 if y23 else 2
-            cnt_ta = 0
-            for marker in list_marker:
-                alleles = series_profile[marker]
-                cnt_ta = cnt_ta + 1 if len(alleles) > limit_allele else cnt_ta
-            return True if cnt_ta > self.TA_THRESHOLD else False
-
-        def check_special_case(locus: str, allele: str) -> bool:
-            """비정형 좌위값 중 허용되는 특수 케이스인지 여부를 체크하고 반환한다.
-            Args:
-                locus: 좌위
-                allele: 좌위값
-            Returns:
-                bool: 특수 케이스 여부
-            """
-            if locus in self.DICT_MARKERS["Y23"]:
-                return True
-            decimal_place = allele.split(".")[1]
-            if decimal_place == "2":
-                return True
-            if locus == "TH01" and allele == "9.3":
-                return True
-            elif locus == "D2S441" and allele == "9.1":
-                return True
-            elif locus == "D1S1656" and (allele == "17.3" or allele == "18.3"):
-                return True
-            elif locus == "Penta E" and (decimal_place == "2" or decimal_place == "3"):
-                return True
-            elif locus == "Penta D" and (decimal_place == "2" or decimal_place == "3"):
-                return True
-            else:
-                return False
-
-        def transform_set_to_list(set_input: set) -> list:
-            """
-            Allele 값이 저장된 집합 데이터를 -값으로 이어 하나의 string으로 만들고 반환
-            Args:
-                set_input(Set): 입력된 좌위 세트
-            """
-
-            def is_number(string: str) -> bool:
-                try:
-                    float(string)
-                    return True
-                except (ValueError, OverflowError):
-                    return False
-
-            num_input = list(filter(is_number, set_input))
-            num_input.sort(key=float)
-            str_input = list(filter(lambda x: not is_number(x), set_input))
-            str_input.sort()
-            if str_input:
-                return str_input
-            else:
-                return [str(s) for s in num_input]
-
+        # 2. 변수 초기화
         string_profile = {}
         flag_NC = False
         flag_ND = False
@@ -396,22 +450,13 @@ class NFSProfileDataManager:
         str_etc = []
         str_etc_microvariant = []
         temp_profile = {}
-        # NC, ND 프로필 처리
-        if code_evidence == "ND":
-            for locus in list_marker:
-                string_profile[locus] = "ND"
-            str_etc = ["ND : 디엔에이형이 검출되지 않음."]
-            return string_profile, str_etc
-        elif code_evidence == "NC":
-            for locus in list_marker:
-                string_profile[locus] = "NC"
-            str_etc = ["NC : 디엔에이형을 결정할 수 없음."]
-            return string_profile, str_etc
-        # 대조, 대표 처리
+
+        # 3. 대조, 대표 프로필 처리
         df_profile = self.export_df_in_set().copy()
         series_profile = df_profile[df_profile["감정물번호"] == code_evidence].iloc[0]
+
         for locus in list_marker:
-            alleles = transform_set_to_list(set(series_profile[locus]))
+            alleles = self._transform_set_to_list(set(series_profile[locus]))
             temp_alleles = []
             if len(alleles) == 0:
                 temp_alleles.append("NC")
@@ -428,7 +473,7 @@ class NFSProfileDataManager:
                         continue
                     modified_allele = allele
                     if allele.find(".") != -1:
-                        if not check_special_case(locus, allele):
+                        if not self._check_special_case(locus, allele):
                             cnt_microvariant = cnt_microvariant + 1
                             decimal_place = allele.split(".")[1]
                             if decimal_place == "1":
@@ -442,7 +487,7 @@ class NFSProfileDataManager:
                             )
                     temp_alleles.append(modified_allele)
             temp_profile[locus] = temp_alleles
-        if check_mixture():
+        if self._check_mixture(series_profile, list_marker, y23):
             str_etc.append("/ : 혼합 디엔에이형.")
             for locus, alleles in temp_profile.items():
                 string_profile[locus] = "/".join([str(element) for element in alleles])
