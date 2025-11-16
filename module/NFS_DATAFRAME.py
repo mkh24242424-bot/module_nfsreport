@@ -52,7 +52,20 @@ def sort_by_serial_number(df: pd.DataFrame, key_column: str) -> pd.DataFrame:
     return df_sorted
 
 
-def link_num_evidence(df, reaction=False, y23=False):
+def link_num_evidence(df: pd.DataFrame, reaction: bool = False, y23: bool = False) -> str:
+    """
+    증거물 번호를 연결하여 보고서 형식의 문자열로 반환
+
+    연속된 증거물 번호는 ~로 묶어 표현하며, 체액 반응 정보를 포함할 수 있습니다.
+
+    Parameters:
+        df: 증거물 정보가 담긴 DataFrame
+        reaction: 체액 반응 정보 포함 여부
+        y23: Y-STR 마커 사용 여부
+
+    Returns:
+        연결된 증거물 번호 문자열 (예: "증1호~증3호, 증5호")
+    """
     # 기재 해야하는 체액반응이 있을 경우 serial에 체액 반응을 추가해서 표기번호 리스트로 만듬.
     df_target = df.copy()
     reaction = reaction and not y23

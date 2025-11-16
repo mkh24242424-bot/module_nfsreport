@@ -68,10 +68,11 @@ class NFSProfileDataManager:
             "Y GATA H4",
         ],
     }
-    PROB_NOMATCH = (
-        0.0003  # Allele frequency 테이블 존재하지 않는 좌위 위치 frequency의 대체값
-    )
-    TA_THRESHOLD = 2  # 혼합 프로필 판단시 Tri-allelic 허용 개수.
+
+    # 상수 정의
+    PROB_NOMATCH = 0.0003  # Allele frequency 테이블에 존재하지 않는 좌위의 기본 빈도값
+    TA_THRESHOLD = 2  # 혼합 프로필 판단 시 허용되는 최대 tri-allelic 좌위 개수
+    STR_24_ADDITIONAL_MARKERS = 3  # STR-24가 STR-20 대비 추가된 마커 수 (D2S441, D10S1248, D22S1045)
 
     def __init__(self, kit: Literal["STR", "YSTR"] = "STR"):
         logger.info(f"NFSProfileDataManager 초기화 시작 (kit={kit})")
@@ -169,7 +170,7 @@ class NFSProfileDataManager:
 
         df_profile = self.df_profile.copy()
         list_markers = (
-            self.DICT_MARKERS[self.kit][:-3] if STR_20 else self.DICT_MARKERS[self.kit]
+            self.DICT_MARKERS[self.kit][:-self.STR_24_ADDITIONAL_MARKERS] if STR_20 else self.DICT_MARKERS[self.kit]
         )
         for marker in list_markers:
             df_profile[marker] = df_profile[marker].apply(
@@ -279,7 +280,7 @@ class NFSProfileDataManager:
         """
         logger.debug(f"개인식별지수 계산 시작 (code_evidence={code_evidence})")
         prob_match = 1.0
-        list_marker = self.DICT_MARKERS["STR"][:-3]
+        list_marker = self.DICT_MARKERS["STR"][:-self.STR_24_ADDITIONAL_MARKERS]
         profile = self.df_profile[self.df_profile["감정물번호"] == code_evidence].iloc[
             0
         ]
@@ -486,7 +487,7 @@ class NFSProfileDataManager:
         logger.debug(f"STRProfile 생성 시작 (samplename={samplename}, STR_20={STR_20})")
         # 마커 리스트 결정
         list_markers = (
-            self.DICT_MARKERS[self.kit][:-3] if STR_20 else self.DICT_MARKERS[self.kit]
+            self.DICT_MARKERS[self.kit][:-self.STR_24_ADDITIONAL_MARKERS] if STR_20 else self.DICT_MARKERS[self.kit]
         )
 
         # 샘플 데이터 조회 (예외 처리 추가)
