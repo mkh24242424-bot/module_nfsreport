@@ -75,10 +75,12 @@ class TestErrorHandlingIntegration:
             '시행일자': ['2025-01-10']
         })
 
+        from module.exceptions import CaseNotFoundError
+
         info = NFS_RI.NFSReportInformation(id_case='2025-C-NOTEXIST')
 
-        # 존재하지 않는 사건번호로 추출 시도
-        with pytest.raises(IndexError):
+        # 존재하지 않는 사건번호로 추출 시도 (리팩토링 후 CaseNotFoundError 발생)
+        with pytest.raises(CaseNotFoundError):
             info.extract_caseinfo_from_df(df_caseinfo)
 
         print(f"\n✓ 존재하지 않는 사건번호 에러 처리 확인")

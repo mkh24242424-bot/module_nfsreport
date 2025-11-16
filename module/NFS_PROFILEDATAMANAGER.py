@@ -4,6 +4,7 @@ import re
 import os
 from . import NFS_DATAFRAME as NFS_DF
 from . import NFS_STRPROFILE as NFS_SP
+from .exceptions import EvidenceNotFoundError
 from typing import Self, Optional, Literal
 
 logger = logging.getLogger(__name__)
@@ -241,8 +242,8 @@ class NFSProfileDataManager:
             logger.info(f"필터링 완료 (code_case={code_case}, 프로필 수={len(df_profile_by_codecase)})")
             return self._get_instance(kit=self.kit, df_profile=df_profile_by_codecase)
         except KeyError as e:
-            logger.error(f"KeyError: {e} - {code_case}의 증거물 정보가 데이터프레임에 존재하지 않습니다.")
-            print(f"{e} : {code_case}의 증거물 정보가 데이터프레임에 존재하지 않습니다.")
+            logger.error(f"{code_case}의 증거물 정보 필터링 실패: 필수 컬럼 누락 (원인: {e})")
+            raise EvidenceNotFoundError(code_case, f"증거물 정보 필터링 실패: 필수 컬럼 누락 - {e}") from e
         
         
     @classmethod

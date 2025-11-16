@@ -1,5 +1,6 @@
 import logging
 from . import NFS_PROFILEDATAMANAGER as NFS_PM
+from .exceptions import CaseNotFoundError
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,9 @@ class NFSReportInformation():
         try:
             self.caseinfo = df_caseinfo.loc[df_caseinfo['접수번호']==self.id_case, list_required_columns].iloc[0].to_dict()
             logger.info(f"사건정보 추출 완료 (id_case={self.id_case}, 필드 수={len(self.caseinfo)})")
-        except KeyError as e:
-            logger.error(f"KeyError: {e} - {self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다.")
-            print(f"{e} : {self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다.")
+        except (KeyError, IndexError) as e:
+            logger.error(f"{self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다 (원인: {type(e).__name__})")
+            raise CaseNotFoundError(self.id_case) from e
             
     def extract_evidenceinfo_from_df(self, df_evidenceinfo:pd.DataFrame):
         logger.debug(f"증거물 정보 추출 시작 (id_case={self.id_case})")
@@ -36,8 +37,8 @@ class NFSReportInformation():
             self.evidenceinfo = df_evidenceinfo.loc[df_evidenceinfo['접수번호']==self.id_case, list_required_columns].reset_index(drop=True)
             logger.info(f"증거물 정보 추출 완료 (id_case={self.id_case}, 증거물 수={len(self.evidenceinfo)})")
         except KeyError as e:
-            logger.error(f"KeyError: {e} - {self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다.")
-            print(f"{e} : {self.id_case}의 사건 정보가 데이터프레임에 존재하지 않습니다.")
+            logger.error(f"{self.id_case}의 증거물 정보 추출 실패: 필수 컬럼 누락 (원인: {e})")
+            raise CaseNotFoundError(self.id_case, f"증거물 정보 추출 실패: 필수 컬럼 누락 - {e}") from e
     
     def load_str_profiledatamanager(self, pdm: NFS_PM.NFSProfileDataManager):
         logger.debug(f"STR 프로필 데이터 매니저 로딩 시작 (id_case={self.id_case})")

@@ -387,17 +387,19 @@ class TestEdgeCasesInline:
 
     def test_empty_dataframe_extract_evidenceinfo(self):
         """빈 DataFrame으로 증거물 추출"""
+        from module.exceptions import CaseNotFoundError
+
         df = pd.DataFrame()
         info = NFS_RI.NFSReportInformation(id_case='2025-C-1234')
 
-        # 실제 동작: KeyError를 raise하지 않고 print만 하고 넘어감
-        # 에러가 발생하지 않음
-        info.extract_evidenceinfo_from_df(df)
-        # evidenceinfo가 비어있거나 처리되지 않았을 것
-        assert True  # 에러 없이 통과하는지만 확인
+        # 리팩토링 후: CaseNotFoundError 발생
+        with pytest.raises(CaseNotFoundError):
+            info.extract_evidenceinfo_from_df(df)
 
     def test_case_not_found_extract_caseinfo(self):
         """존재하지 않는 사건번호로 추출"""
+        from module.exceptions import CaseNotFoundError
+
         df = pd.DataFrame({
             '접수번호': ['2025-C-5678'],
             '의뢰관서': ['서울지방경찰청'],
@@ -408,8 +410,8 @@ class TestEdgeCasesInline:
 
         info = NFS_RI.NFSReportInformation(id_case='2025-C-9999')  # 존재하지 않음
 
-        # IndexError 발생할 것으로 예상
-        with pytest.raises(IndexError):
+        # CaseNotFoundError 발생할 것으로 예상
+        with pytest.raises(CaseNotFoundError):
             info.extract_caseinfo_from_df(df)
 
     def test_strprofile_with_none(self):

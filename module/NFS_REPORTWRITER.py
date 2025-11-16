@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 from . import NFS_REPORTINFORMATION as NFS_RI
 from .NFS_REPORTPHRASER import Properties_Phrase
+from .exceptions import DataFrameOperationError, TemplateError
 
 logger = logging.getLogger(__name__)
 
@@ -402,12 +403,11 @@ class NFSReportWriter():
                 logger.info(f"[{idx}/{len(var_kit['code_categorized'][type_profile])}] 프로필 처리 중 (code={code}, type={type_profile})")
                 info_ref = var_kit['info_indexed'].loc[[(code, type_profile)], :]
                 logger.debug(f"참조 정보 행 수: {len(info_ref) if isinstance(info_ref, pd.DataFrame) else 1}")
-                try: #예외처리를 이렇게 써도 되나?
+                try:
                     info_match = var_kit['info_indexed'].loc[[(code, "일반")], :]
                     logger.debug(f"일치 정보 행 수: {len(info_match) if isinstance(info_match, pd.DataFrame) else 1}")
                 except KeyError as e:
-                    logger.warning(f"KeyError: {e} - 매치되는 일반 프로필이 없습니다. 빈 데이터프레임을 반환합니다.")
-                    print(f"{e}: 매치되는 그룹바이가 없습니다. 빈 데이터프레임을 반환합니다.")
+                    logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code}): 빈 데이터프레임 사용")
                     info_match = pd.DataFrame({})
                 id_ref = info_ref.iloc[0]["감정물번호"] # 대조 데이터가 하나라고 가정
                 nickname_ref =str(info_ref.iloc[0][var_kit["colname_nickname"]])
@@ -454,9 +454,9 @@ class NFSReportWriter():
                         phrase = phraser(properties)
                         self.phrases_result.append(phrase)
                         logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-                    except TypeError as e: #TypeError로 모두 잡을 수 있을까?
-                        logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
-                        print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
+                    except TypeError as e:
+                        logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
+                        raise TemplateError(phraser.__name__, e) from e
                     # 일치 프로필 블록 생성
                     logger.debug("일치 프로필 블록 생성 시작")
                     linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
@@ -498,9 +498,9 @@ class NFSReportWriter():
                 phrase = phraser(properties)
                 self.phrases_result.append(phrase)
                 logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-            except TypeError as e: #TypeError로 모두 잡을 수 있을까?
-                logger.error(f"TypeError: {e} - 감정서 문구 탬플릿 오류입니다.")
-                print(f"{e}: 감정서 문구 탬플릿 오류입니다.")
+            except TypeError as e:
+                logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
+                raise TemplateError(phraser.__name__, e) from e
 
             # 프로필 블록 생성
             logger.debug("프로필 블록 생성 시작")
