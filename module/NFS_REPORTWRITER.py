@@ -114,133 +114,8 @@ class NFSReportWriter():
         self.categorized_info_ystr.sort_index(inplace=True)  # 조회 성능 향상을 위한 정렬
         logger.info(f"YSTR 프로필 분류 완료 (유형별: {dict((k, len(v)) for k, v in self.code_categorized_ystr.items())})")
 
-    def _create_text_evidence(self, list_id: list, kit:Literal["STR", "YSTR"]= "STR", reaction=False) -> str:
-        """
-        각 증거물의 감정물번호를 감정서 본문에 넣을 형식(표기번호)으로 변환하여 반환하는 함수. 감정물번 호가 연속될 경우 ~로 묶어서 반환함.
-        체액 반응 여부가 해당 증거물에 존재할 경우 이를 고려해서 반응 여부를 삽입.
-
-        Parameters
-        ----------
-        list_id: 작업할 표기번호들의 증거물번호 리스트
-        kit: 사용 키트 종류. "STR" or "YSTR"
-        reaction: 체액반응 실험결과 포함 여부
-
-        Returns
-        -------
-        연속된 표기번호가 ~으로 묶여진 문자열.
-        예시 : list_samplenames: ["증1호", "증2호", "증3호"], reaction=False -> ["증1호~증3호"]
-        """
-        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
-        logger.debug(f"입력 증거물 ID: {list_id}")
-        kit_data = self.switch_kit[kit]
-        df_target = self.report_data.evidenceinfo
-        df_target = df_target.loc[df_target[kit_data["colname_reported"]] != "미기재", :].copy()
-        
-        logger.debug(f"미기재 제외 후 데이터 크기: {len(df_target)}")
-        df_target['표기번호'] = df_target[kit_data["colname_text_evidence"]] 
-
-        # 다음 감정물번호를 나타내는 칼럼 생성
-        df_target["감정물번호_다음"] = df_target["감정물번호"].shift(-1)
-        # 해당 증거물명의 데이터만 추출
-        df_target = df_target.loc[df_target["감정물번호"].isin(list_id)]
-        df_target = df_target.reset_index(drop=True)
-        logger.debug(f"증거물 ID로 필터링 후 데이터 크기: {len(df_target)}")
-        # 반응실험결과 칼럼 생성
-        equivalent_reaction = (
-            ""  # 반응실험 결과가 모두 같을 때 모두 ~반응 양성 하나로 적어주기 위한 변수
-        )
-
-        if reaction:
-            logger.debug("체액 반응 정보 처리 시작")
-            df_target.loc[:, "반응실험결과"] = (
-                df_target["타액_반응"].apply(
-                    lambda x: "타액반응 " + x if x != "실험 안함" else ""
-                )
-                + ","
-                + df_target["정액_반응"].apply(
-                    lambda x: "정액반응 " + x if x != "실험 안함" else ""
-                )
-                + ","
-                + df_target["혈흔_반응"].apply(
-                    lambda x: "혈흔반응 " + x if x != "실험 안함" else ""
-                )
-            )
-            list_reaction = df_target["반응실험결과"].tolist()
-            final = []
-            for i in list_reaction:
-                each = i.split(",")
-                process = [x for x in each if x != ""]
-                print("process:", process)
-                if len(process) == 0:
-                    final.append("")
-                else:
-                    final.append("(" + ", ".join(process) + ")")
-            df_target["반응실험결과"] = final
-            if (
-                1 < len(df_target) == df_target["반응실험결과"].value_counts().iloc[0]
-            ):  # 모두 반응실험 결과가 같으면
-                equivalent_reaction = str(df_target.loc[
-                    df_target.index[-1], "반응실험결과"
-                ]).replace("(", "(모두 ")
-                logger.debug(f"동일 반응 감지: {equivalent_reaction}")
-                df_target.loc[:, "반응실험결과"] = ""
-            df_target["표기번호"] = df_target["표기번호"] + df_target["반응실험결과"]
-            logger.debug("체액 반응 정보 처리 완료")
-
-        # 표기번호에 괄호가 있는지 여부 칼럼 생성
-        df_target["괄호여부"] = df_target["표기번호"].str.contains(
-            r"\(.*\)", regex=True
-        )
-        # 필요한 데이터만 정리
-        df_target = df_target[["감정물번호", "감정물번호_다음", "표기번호", "괄호여부"]]
-
-        # 데이터가 하나일 때
-        if len(df_target) == 1:
-            logger.debug("단일 증거물 처리")
-            linked_num = df_target.iloc[0]["표기번호"]
-        elif len(df_target) == 2:
-            logger.debug("2개 증거물 처리 ('및'로 연결)")
-            linked_num = (
-                df_target.iloc[0]["표기번호"] + " 및 " + df_target.iloc[1]["표기번호"]
-            )
-        else:
-            logger.debug(f"3개 이상 증거물 처리 (총 {len(df_target)}개, 연속 번호 그룹화 진행)")
-            stack = []
-            chains = []
-            stack.append(df_target.iloc[0]["표기번호"])
-            next_samplename = df_target.iloc[0]["감정물번호_다음"]
-            prev_parentheses = df_target.iloc[0]["괄호여부"]
-            for index, row in df_target.iloc[1:].iterrows():
-                if (
-                    next_samplename == row["감정물번호"]
-                    and not row["괄호여부"]
-                    and not prev_parentheses
-                ):
-                    stack.append(row["표기번호"])
-                else:
-                    chains.append(stack)
-                    stack = [row["표기번호"]]
-                next_samplename = row["감정물번호_다음"]
-                prev_parentheses = row["괄호여부"]
-            chains.append(stack)
-            logger.debug(f"연속 번호 그룹 수: {len(chains)}, 그룹별 크기: {[len(c) for c in chains]}")
-            list_text_chain = []
-            for chain in chains:
-                if len(chain) < 3:
-                    text_chain = ", ".join(chain)
-                    logger.debug(f"그룹 처리 (개별): {text_chain}")
-                else:
-                    text_chain = chain[0] + "~" + chain[-1]
-                    logger.debug(f"그룹 처리 (범위): {text_chain}")
-                list_text_chain.append(text_chain)
-            linked_num = ", ".join(list_text_chain)
-        result = linked_num + equivalent_reaction
-        logger.debug(f"증거물 텍스트 생성 완료: {result[:100] if len(result) <= 100 else result[:100] + '...'}")
-        return result
-
-    # ==================== Refactored Methods (v2) ====================
-    # 아래 메서드들은 _create_text_evidence의 리팩토링 버전입니다.
-    # 기존 메서드는 위에 유지되며, 검증 완료 후 전환 예정입니다.
+    # ==================== Evidence Text Generation ====================
+    # 증거물 번호를 감정서 형식으로 변환하는 메서드들
 
     # 상수 정의
     REACTION_TYPES = {
@@ -261,14 +136,14 @@ class NFSReportWriter():
         Returns:
             필터링 및 전처리된 DataFrame
         """
-        logger.debug(f"[v2] 증거물 필터링 시작 (kit={kit}, 입력 ID 수={len(list_id)})")
+        logger.debug(f"증거물 필터링 시작 (kit={kit}, 입력 ID 수={len(list_id)})")
         kit_data = self.switch_kit[kit]
         df = self.report_data.evidenceinfo
 
         # 1단계: 미기재 제외
         original_size = len(df)
         df = df[df[kit_data["colname_text_evidence"]] != "미기재"].copy()
-        logger.debug(f"[v2] 미기재 제외 (전: {original_size}, 후: {len(df)})")
+        logger.debug(f"미기재 제외 (전: {original_size}, 후: {len(df)})")
 
         # 2단계: 표기번호 컬럼 추가
         df['표기번호'] = df[kit_data["colname_text_evidence"]]
@@ -282,7 +157,7 @@ class NFSReportWriter():
 
         # 4단계: 지정된 감정물번호만 필터링
         df = df[df["감정물번호"].isin(list_id)]
-        logger.debug(f"[v2] ID 필터링 후 데이터 크기: {len(df)}")
+        logger.debug(f"ID 필터링 후 데이터 크기: {len(df)}")
 
         return df.reset_index(drop=True)
 
@@ -345,7 +220,7 @@ class NFSReportWriter():
         Returns:
             (반응 정보가 추가된 DataFrame, 동일 반응 문자열)
         """
-        logger.debug(f"[v2] 체액 반응 정보 처리 시작 (데이터 수={len(df)})")
+        logger.debug(f"체액 반응 정보 처리 시작 (데이터 수={len(df)})")
         # 각 반응 유형 처리
         reactions = []
         for col in ["타액_반응", "정액_반응", "혈흔_반응"]:
@@ -360,12 +235,12 @@ class NFSReportWriter():
         # 모두 같은 반응이면 한 번만 표시
         equivalent_reaction = self._check_equivalent_reaction(df)
         if equivalent_reaction:
-            logger.debug(f"[v2] 동일 반응 감지: {equivalent_reaction}")
+            logger.debug(f"동일 반응 감지: {equivalent_reaction}")
             df["반응실험결과"] = ""
 
         # 표기번호에 반응 추가
         df["표기번호"] = df["표기번호"] + df["반응실험결과"]
-        logger.debug("[v2] 체액 반응 정보 처리 완료")
+        logger.debug("체액 반응 정보 처리 완료")
 
         return df, equivalent_reaction
 
@@ -379,7 +254,7 @@ class NFSReportWriter():
         Returns:
             그룹화된 표기번호 리스트 (예: [["증1호", "증2호", "증3호"], ["증5호"]])
         """
-        logger.debug(f"[v2] 연속 번호 그룹화 시작 (데이터 수={len(df)})")
+        logger.debug(f"연속 번호 그룹화 시작 (데이터 수={len(df)})")
         if len(df) == 0:
             return []
 
@@ -407,7 +282,7 @@ class NFSReportWriter():
                 current_chain = [row["표기번호"]]
 
         chains.append(current_chain)
-        logger.debug(f"[v2] 연속 번호 그룹화 완료 (그룹 수={len(chains)}, 그룹별 크기={[len(c) for c in chains]})")
+        logger.debug(f"연속 번호 그룹화 완료 (그룹 수={len(chains)}, 그룹별 크기={[len(c) for c in chains]})")
         return chains
 
     def _format_evidence_text(self, chains: list[list[str]], equivalent_reaction: str = "") -> str:
@@ -421,32 +296,32 @@ class NFSReportWriter():
         Returns:
             포맷팅된 증거물 문자열 (예: "증1호~증3호, 증5호")
         """
-        logger.debug(f"[v2] 증거물 텍스트 포맷팅 시작 (그룹 수={len(chains)})")
+        logger.debug(f"증거물 텍스트 포맷팅 시작 (그룹 수={len(chains)})")
         formatted_chains = []
 
         for idx, chain in enumerate(chains, 1):
             if len(chain) >= self.MIN_CHAIN_LENGTH:
                 # 3개 이상: "증1호~증5호"
                 formatted = f"{chain[0]}~{chain[-1]}"
-                logger.debug(f"[v2] 그룹 {idx} 포맷팅 (범위): {formatted}")
+                logger.debug(f"그룹 {idx} 포맷팅 (범위): {formatted}")
                 formatted_chains.append(formatted)
             else:
                 # 1-2개: "증1호, 증2호"
                 formatted = ", ".join(chain)
-                logger.debug(f"[v2] 그룹 {idx} 포맷팅 (개별): {formatted}")
+                logger.debug(f"그룹 {idx} 포맷팅 (개별): {formatted}")
                 formatted_chains.append(formatted)
 
         result = ", ".join(formatted_chains)
         final_result = result + equivalent_reaction
-        logger.debug(f"[v2] 증거물 텍스트 포맷팅 완료: {final_result[:100] if len(final_result) <= 100 else final_result[:100] + '...'}")
+        logger.debug(f"증거물 텍스트 포맷팅 완료: {final_result[:100] if len(final_result) <= 100 else final_result[:100] + '...'}")
         return final_result
 
-    def _create_text_evidence_v2(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
+    def _create_text_evidence(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
         """
-        증거물 번호를 감정서 형식으로 변환 (리팩토링 버전)
+        증거물 번호를 감정서 형식으로 변환
 
-        이 메서드는 _create_text_evidence의 리팩토링 버전입니다.
-        기존 메서드(106줄)를 6개의 작은 메서드로 분리하여 가독성과 테스트 용이성을 향상시켰습니다.
+        연속된 감정물번호는 ~로 묶어 표현하며, 체액 반응 정보를 포함할 수 있습니다.
+        기존 123줄 메서드를 6개의 작은 헬퍼 메서드로 분리하여 리팩토링했습니다.
 
         개선사항:
         - 단일 책임 원칙 적용
@@ -463,43 +338,43 @@ class NFSReportWriter():
             포맷팅된 증거물 문자열 (예: "증1호~증3호")
 
         Examples:
-            >>> writer._create_text_evidence_v2(["2023-D-1-1", "2023-D-1-2", "2023-D-1-3"])
+            >>> writer._create_text_evidence(["2023-D-1-1", "2023-D-1-2", "2023-D-1-3"])
             "증1호~증3호"
 
-            >>> writer._create_text_evidence_v2(["2023-D-1-1"], reaction=True)
+            >>> writer._create_text_evidence(["2023-D-1-1"], reaction=True)
             "증1호(타액반응 양성)"
         """
-        logger.debug(f"[v2] 증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
 
         # 1. 데이터 필터링
         df = self._filter_evidence_by_ids(list_id, kit)
 
         # 2. 특수 케이스 처리
         if len(df) == 0:
-            logger.debug("[v2] 빈 데이터프레임 (결과: 빈 문자열)")
+            logger.debug("빈 데이터프레임 (결과: 빈 문자열)")
             return ""
         if len(df) == 1:
             # 단일 증거물
-            logger.debug("[v2] 단일 증거물 처리")
+            logger.debug("단일 증거물 처리")
             if reaction:
                 df, equiv = self._add_reaction_info(df)
                 result = df.iloc[0]["표기번호"] + equiv
-                logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+                logger.debug(f"증거물 텍스트 생성 완료: {result}")
                 return result
             result = df.iloc[0]["표기번호"]
-            logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+            logger.debug(f"증거물 텍스트 생성 완료: {result}")
             return result
         if len(df) == 2:
             # 두 개 증거물: "및"로 연결
-            logger.debug("[v2] 2개 증거물 처리 ('및'로 연결)")
+            logger.debug("2개 증거물 처리 ('및'로 연결)")
             if reaction:
                 df, equiv = self._add_reaction_info(df)
             result = f"{df.iloc[0]['표기번호']} 및 {df.iloc[1]['표기번호']}"
-            logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+            logger.debug(f"증거물 텍스트 생성 완료: {result}")
             return result
 
         # 3. 체액 반응 처리
-        logger.debug(f"[v2] 3개 이상 증거물 처리 (총 {len(df)}개)")
+        logger.debug(f"3개 이상 증거물 처리 (총 {len(df)}개)")
         equivalent_reaction = ""
         if reaction:
             df, equivalent_reaction = self._add_reaction_info(df)
@@ -509,10 +384,10 @@ class NFSReportWriter():
 
         # 5. 최종 문자열 생성
         result = self._format_evidence_text(chains, equivalent_reaction)
-        logger.debug(f"[v2] 증거물 텍스트 생성 완료: {result}")
+        logger.debug(f"증거물 텍스트 생성 완료: {result}")
         return result
 
-    # ==================== End of Refactored Methods ====================
+    # ==================== Profile Content Generation ====================
 
     def make_contents_with_profile(self, phraser: Callable, type_profile:Literal["대표", "대조"], kit:Literal["STR", "YSTR"]="STR") -> None:
         """
@@ -629,7 +504,7 @@ class NFSReportWriter():
 
             # 프로필 블록 생성
             logger.debug("프로필 블록 생성 시작")
-            
+
             linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
             block_match = Block_Profile(
                 idx_first=info_match.iloc[0]["index"],

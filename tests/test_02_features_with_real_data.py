@@ -189,7 +189,7 @@ class TestNFSReportWriterWithRealData:
     def test_create_text_evidence_v2(self, df_caseinfo, df_report,
                                       df_profile_str, df_profile_ystr,
                                       sample_case_id):
-        """_create_text_evidence_v2 메서드 테스트"""
+        """_create_text_evidence 메서드 테스트 (리팩토링된 버전)"""
         # 데이터 준비
         info = NFS_RI.NFSReportInformation(id_case=sample_case_id)
         info.extract_caseinfo_from_df(df_caseinfo)
@@ -206,13 +206,13 @@ class TestNFSReportWriterWithRealData:
         RW = NFS_RW.NFSReportWriter(info, [])
         RW.categorize_profiles()
 
-        # _create_text_evidence_v2 호출
+        # _create_text_evidence 호출 (리팩토링된 메서드 테스트)
         if RW.code_categorized:
             # 첫 번째 프로필 타입의 첫 번째 코드로 테스트
             for profile_type, codes in RW.code_categorized.items():
                 if codes and len(codes) > 0:
                     test_codes = list(codes[:3])  # 최대 3개만 테스트
-                    text_evidence = RW._create_text_evidence_v2(
+                    text_evidence = RW._create_text_evidence(
                         list_id=test_codes,
                         kit="STR"
                     )
@@ -221,7 +221,7 @@ class TestNFSReportWriterWithRealData:
                     assert text_evidence is not None
                     assert isinstance(text_evidence, str)
 
-                    print(f"\n✓ _create_text_evidence_v2 성공:")
+                    print(f"\n✓ _create_text_evidence 성공:")
                     print(f"  - 타입: {profile_type}")
                     print(f"  - 코드 수: {len(test_codes)}")
                     print(f"  - 생성된 텍스트: {text_evidence}")
