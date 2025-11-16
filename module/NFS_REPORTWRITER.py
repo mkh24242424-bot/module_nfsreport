@@ -390,86 +390,119 @@ class NFSReportWriter():
 
     # ==================== Profile Content Generation ====================
 
+    def _get_match_info(self, var_kit: dict, code: str) -> pd.DataFrame:
+        """일치 프로필 정보를 가져오며, 없으면 빈 데이터프레임 반환"""
+        try:
+            info_match = var_kit['info_indexed'].loc[[(code, "일반")], :]
+            logger.debug(f"일치 정보 행 수: {len(info_match) if isinstance(info_match, pd.DataFrame) else 1}")
+            return info_match
+        except KeyError as e:
+            logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code}): 빈 데이터프레임 사용")
+            return pd.DataFrame({})
+
+    def _create_reference_block(self, info_ref: pd.DataFrame, id_ref: str, nickname_ref: str,
+                                var_kit: dict, kit: str) -> None:
+        """대조 프로필 블록을 생성하여 var_kit에 추가"""
+        logger.debug("대조 프로필 블록 생성 시작")
+        linked_text_ref = self._create_text_evidence(list_id=[id_ref], kit=kit)
+        block_ref = Block_Profile(
+            idx_first=info_ref.iloc[0]["index"],
+            nickname=nickname_ref,
+            text_evidence=linked_text_ref,
+            id_evidence=id_ref
+        )
+        var_kit["profile_blocks_ref"].append(block_ref)
+        logger.debug(f"대조 프로필 블록 생성 완료 (text={linked_text_ref})")
+
+    def _merge_representative_and_match(self, info_ref: pd.DataFrame, info_match: pd.DataFrame) -> pd.DataFrame:
+        """대표 프로필과 일치 프로필을 병합"""
+        logger.debug("대표 프로필과 일치 프로필 병합 시작")
+        merged = pd.concat([info_ref, info_match]).sort_values(by='index')
+        logger.debug(f"병합 후 총 행 수: {len(merged)}")
+        return merged
+
+    def _extract_profile_properties(self, kit: str, id_ref: str) -> tuple:
+        """프로필 속성(성별, 개인식별지수) 추출"""
+        if kit == "STR":
+            logger.debug("성별 및 개인식별지수 추출 시작")
+            gender = self.report_data.pm_str.extract_gender_from_profile(id_ref) if self.report_data.pm_str is not None else ""
+            lr = self.report_data.pm_str.calculate_likelihood_from_profile(id_ref) if self.report_data.pm_str is not None else ("0", "0")
+            logger.debug(f"성별: {gender}, 개인식별지수: {lr[0]}x10^{lr[1]}")
+            return gender, lr
+        else:
+            return "", ("0", "0")
+
+    def _generate_phrase_and_blocks(self, info_match: pd.DataFrame, id_ref: str, nickname_ref: str,
+                                     var_kit: dict, kit: str, phraser: Callable,
+                                     gender: str, lr: tuple) -> None:
+        """문구와 블록을 생성하여 추가"""
+        logger.debug(f"증거물 텍스트 생성 시작 (증거물 수={len(info_match)})")
+        if len(info_match):
+            text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
+            properties = Properties_Phrase(
+                gender=gender,
+                likelihoodratio=lr,
+                text_evidence=text_evidence,
+                nickname=nickname_ref
+            )
+            logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
+
+            # 문장생성
+            try:
+                logger.debug("감정서 문구 생성 중 (phraser 호출)")
+                phrase = phraser(properties)
+                self.phrases_result.append(phrase)
+                logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
+            except TypeError as e:
+                logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
+                raise TemplateError(phraser.__name__, e) from e
+
+            # 일치 프로필 블록 생성
+            logger.debug("일치 프로필 블록 생성 시작")
+            linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
+            block_match = Block_Profile(
+                idx_first=info_match.iloc[0]["index"],
+                nickname="",
+                text_evidence=linked_text_match,
+                id_evidence=id_ref
+            )
+            var_kit["profile_blocks"].append(block_match)
+            logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
+
     def make_contents_with_profile(self, phraser: Callable, type_profile:Literal["대표", "대조"], kit:Literal["STR", "YSTR"]="STR") -> None:
         """
             감정서에 들어갈 프로필이 존재하는 증거물(대표, 대조, 일치)에 대한 결과 문구를 작성
         """
         logger.info(f"프로필 문구 생성 시작 (type_profile={type_profile}, kit={kit})")
         var_kit = self.switch_kit[kit]
-        # 대조
-        if type_profile in var_kit["code_categorized"].keys():
-            logger.info(f"{type_profile} 프로필 {len(var_kit['code_categorized'][type_profile])}개 발견")
-            for idx, code in enumerate(var_kit["code_categorized"][type_profile], 1):
-                logger.info(f"[{idx}/{len(var_kit['code_categorized'][type_profile])}] 프로필 처리 중 (code={code}, type={type_profile})")
-                info_ref = var_kit['info_indexed'].loc[[(code, type_profile)], :]
-                logger.debug(f"참조 정보 행 수: {len(info_ref) if isinstance(info_ref, pd.DataFrame) else 1}")
-                try:
-                    info_match = var_kit['info_indexed'].loc[[(code, "일반")], :]
-                    logger.debug(f"일치 정보 행 수: {len(info_match) if isinstance(info_match, pd.DataFrame) else 1}")
-                except KeyError as e:
-                    logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code}): 빈 데이터프레임 사용")
-                    info_match = pd.DataFrame({})
-                id_ref = info_ref.iloc[0]["감정물번호"] # 대조 데이터가 하나라고 가정
-                nickname_ref =str(info_ref.iloc[0][var_kit["colname_nickname"]])
-                logger.info(f"참조 프로필 정보 (id={id_ref}, nickname={nickname_ref})")
-                if type_profile=="대조": # 대조시료의 비교 문구의 경우 프로필 블록을 별개로 생성한다.
-                    logger.debug("대조 프로필 블록 생성 시작")
-                    linked_text_ref = self._create_text_evidence(
-                        list_id=[id_ref], kit=kit
-                    )
-                    block_ref = Block_Profile(
-                        idx_first=info_ref.iloc[0]["index"],
-                        nickname=nickname_ref,
-                        text_evidence=linked_text_ref,
-                        id_evidence=id_ref
-                    )
-                    var_kit["profile_blocks_ref"].append(block_ref)
-                    logger.debug(f"대조 프로필 블록 생성 완료 (text={linked_text_ref})")
-                elif type_profile=="대표": # 대표시료의 비교 문구의 경우 대표프로필과 일치프로필을 합쳐서 처리한다.
-                    logger.debug("대표 프로필과 일치 프로필 병합 시작")
-                    info_match = pd.concat([info_ref, info_match]).sort_values(by='index')
-                    logger.debug(f"병합 후 총 행 수: {len(info_match)}")
-                
-                # 문장 생성시 필요한 정보를 정리
-                if kit=="STR":
-                    logger.debug("성별 및 개인식별지수 추출 시작")
-                    gender=self.report_data.pm_str.extract_gender_from_profile(id_ref) if self.report_data.pm_str is not None else ""
-                    lr = self.report_data.pm_str.calculate_likelihood_from_profile(id_ref) if self.report_data.pm_str is not None else ("0","0")
-                    logger.debug(f"성별: {gender}, 개인식별지수: {lr[0]}x10^{lr[1]}")
-                else:
-                    gender = ""
-                    lr = ("0", "0")
-                logger.debug(f"증거물 텍스트 생성 시작 (증거물 수={len(info_match)})")
-                if len(info_match):
-                    text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
-                    properties = Properties_Phrase(
-                        gender=gender,
-                        likelihoodratio=lr,
-                        text_evidence=text_evidence,
-                        nickname=nickname_ref) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
-                    logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
-                    # 문장생성
-                    try:
-                        logger.debug("감정서 문구 생성 중 (phraser 호출)")
-                        phrase = phraser(properties)
-                        self.phrases_result.append(phrase)
-                        logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-                    except TypeError as e:
-                        logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
-                        raise TemplateError(phraser.__name__, e) from e
-                    # 일치 프로필 블록 생성
-                    logger.debug("일치 프로필 블록 생성 시작")
-                    linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
-                    block_match = Block_Profile(
-                        idx_first=info_match.iloc[0]["index"],
-                        nickname="",
-                        text_evidence=linked_text_match,
-                        id_evidence=id_ref
-                    )
-                    var_kit["profile_blocks"].append(block_match)
-                    logger.debug(f"일치 프로필 블록 생성 완료 (text={linked_text_match})")
-        else:
+
+        if type_profile not in var_kit["code_categorized"].keys():
             logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
+            return
+
+        logger.info(f"{type_profile} 프로필 {len(var_kit['code_categorized'][type_profile])}개 발견")
+        for idx, code in enumerate(var_kit["code_categorized"][type_profile], 1):
+            logger.info(f"[{idx}/{len(var_kit['code_categorized'][type_profile])}] 프로필 처리 중 (code={code}, type={type_profile})")
+
+            # 1. 참조 정보 및 일치 정보 가져오기
+            info_ref = var_kit['info_indexed'].loc[[(code, type_profile)], :]
+            logger.debug(f"참조 정보 행 수: {len(info_ref) if isinstance(info_ref, pd.DataFrame) else 1}")
+            info_match = self._get_match_info(var_kit, code)
+
+            id_ref = info_ref.iloc[0]["감정물번호"]
+            nickname_ref = str(info_ref.iloc[0][var_kit["colname_nickname"]])
+            logger.info(f"참조 프로필 정보 (id={id_ref}, nickname={nickname_ref})")
+
+            # 2. 타입별 처리
+            if type_profile == "대조":
+                self._create_reference_block(info_ref, id_ref, nickname_ref, var_kit, kit)
+            elif type_profile == "대표":
+                info_match = self._merge_representative_and_match(info_ref, info_match)
+
+            # 3. 프로필 속성 추출 및 문구/블록 생성
+            gender, lr = self._extract_profile_properties(kit, id_ref)
+            self._generate_phrase_and_blocks(info_match, id_ref, nickname_ref, var_kit, kit, phraser, gender, lr)
+
         logger.info(f"프로필 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
     
     def make_contents_without_profile(self, phraser: Callable, type_profile:Literal["ND", "NC"], kit:Literal["STR", "YSTR"]="STR") -> None:
