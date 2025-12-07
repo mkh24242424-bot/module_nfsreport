@@ -107,12 +107,13 @@ class TestNFSProfileDataManagerWithRealData:
         assert not pm.df_profile.empty
         assert len(pm.df_profile) == len(df_profile_str)
 
-        # DICT_MARKERS 확인
-        assert "STR" in pm.DICT_MARKERS
-        assert len(pm.DICT_MARKERS["STR"]) == 24  # STR 마커 24개
+        # DICT_MARKERS 확인 (모듈 상수 직접 사용)
+        from module.constants_strprofile import DICT_MARKERS
+        assert "STR" in DICT_MARKERS
+        assert len(DICT_MARKERS["STR"]) == 24  # STR 마커 24개
 
         print(f"\n✓ STR ProfileDataManager 초기화 성공:")
-        print(f"  - 마커 수: {len(pm.DICT_MARKERS['STR'])}")
+        print(f"  - 마커 수: {len(DICT_MARKERS['STR'])}")
 
     def test_initialization_ystr(self, df_profile_ystr):
         """YSTR ProfileDataManager 초기화 테스트"""
@@ -123,12 +124,13 @@ class TestNFSProfileDataManagerWithRealData:
         assert not pm.df_profile.empty
         assert len(pm.df_profile) == len(df_profile_ystr)
 
-        # DICT_MARKERS 확인
-        assert "YSTR" in pm.DICT_MARKERS
-        assert len(pm.DICT_MARKERS["YSTR"]) == 20  # YSTR 마커 20개
+        # DICT_MARKERS 확인 (모듈 상수 직접 사용)
+        from module.constants_strprofile import DICT_MARKERS
+        assert "YSTR" in DICT_MARKERS
+        assert len(DICT_MARKERS["YSTR"]) == 20  # YSTR 마커 20개
 
         print(f"\n✓ YSTR ProfileDataManager 초기화 성공:")
-        print(f"  - 마커 수: {len(pm.DICT_MARKERS['YSTR'])}")
+        print(f"  - 마커 수: {len(DICT_MARKERS['YSTR'])}")
 
     def test_filter_by_codecase(self, df_profile_str, sample_case_id):
         """사건번호로 프로필 필터링 테스트"""
@@ -156,10 +158,10 @@ class TestNFSProfileDataManagerWithRealData:
 class TestNFSReportWriterWithRealData:
     """NFSReportWriter 클래스 기능 테스트 (실제 데이터)"""
 
-    def test_categorize_profiles_str(self, df_caseinfo, df_report,
+    def test_block_manager_creation(self, df_caseinfo, df_report,
                                       df_profile_str, df_profile_ystr,
                                       sample_case_id):
-        """프로필 분류 테스트 (STR)"""
+        """블록 매니저 자동 생성 테스트 (새 구조)"""
         # 데이터 준비
         info = NFS_RI.NFSReportInformation(id_case=sample_case_id)
         info.extract_caseinfo_from_df(df_caseinfo)
@@ -175,21 +177,24 @@ class TestNFSReportWriterWithRealData:
 
         RW = NFS_RW.NFSReportWriter(info, [])
 
-        # 프로필 분류
-        RW.categorize_profiles()
+        # 블록 매니저 검증
+        assert hasattr(RW, 'blocks_manager')
+        assert "STR" in RW.blocks_manager
+        assert "YSTR" in RW.blocks_manager
 
-        # 검증
-        assert isinstance(RW.code_categorized, dict)
-        print(f"\n✓ 프로필 분류 성공:")
-        print(f"  - 분류된 타입: {list(RW.code_categorized.keys())}")
+        str_blocks = RW.blocks_manager["STR"].blocks
+        assert isinstance(str_blocks, dict)
 
-        for profile_type, codes in RW.code_categorized.items():
-            print(f"  - {profile_type}: {len(codes)}개")
+        print(f"\n✓ 블록 매니저 생성 성공:")
+        print(f"  - 블록 유형: {list(str_blocks.keys())}")
 
-    def test_create_text_evidence_v2(self, df_caseinfo, df_report,
+        for block_type, blocks in str_blocks.items():
+            print(f"  - {block_type}: {len(blocks)}개")
+
+    def test_evidence_text_generator(self, df_caseinfo, df_report,
                                       df_profile_str, df_profile_ystr,
                                       sample_case_id):
-        """_create_text_evidence 메서드 테스트 (리팩토링된 버전)"""
+        """EvidenceTextGenerator 메서드 테스트 (새 구조)"""
         # 데이터 준비
         info = NFS_RI.NFSReportInformation(id_case=sample_case_id)
         info.extract_caseinfo_from_df(df_caseinfo)
@@ -204,28 +209,25 @@ class TestNFSReportWriterWithRealData:
         info.load_ystr_profiledatamanager(pm_ystr)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
 
-        # _create_text_evidence 호출 (리팩토링된 메서드 테스트)
-        if RW.code_categorized:
-            # 첫 번째 프로필 타입의 첫 번째 코드로 테스트
-            for profile_type, codes in RW.code_categorized.items():
-                if codes and len(codes) > 0:
-                    test_codes = list(codes[:3])  # 최대 3개만 테스트
-                    text_evidence = RW._create_text_evidence(
-                        list_id=test_codes,
-                        kit="STR"
-                    )
+        # evidence_text_generator 접근
+        text_gen = RW.blocks_manager["STR"].evidence_text_generator
 
-                    # 검증
-                    assert text_evidence is not None
-                    assert isinstance(text_evidence, str)
+        # 샘플 ID로 텍스트 생성 테스트
+        sample_ids = info.evidenceinfo['감정물번호'].head(3).tolist()
+        if sample_ids:
+            text_evidence = text_gen.create_text_evidence(
+                list_id=sample_ids,
+                kit="STR"
+            )
 
-                    print(f"\n✓ _create_text_evidence 성공:")
-                    print(f"  - 타입: {profile_type}")
-                    print(f"  - 코드 수: {len(test_codes)}")
-                    print(f"  - 생성된 텍스트: {text_evidence}")
-                    break
+            # 검증
+            assert text_evidence is not None
+            assert isinstance(text_evidence, str)
+
+            print(f"\n✓ evidence_text_generator 성공:")
+            print(f"  - ID 수: {len(sample_ids)}")
+            print(f"  - 생성된 텍스트: {text_evidence}")
 
 
 class TestNFSReportPhraserWithRealData:
@@ -248,10 +250,9 @@ class TestNFSReportPhraserWithRealData:
         info.load_str_profiledatamanager(pm_str)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
 
-        # Properties_Phrase 생성
-        properties = NFS_RW.Properties_Phrase(
+        # Properties_Phrase 생성 (NFS_RP에서 가져옴)
+        properties = NFS_RP.Properties_Phrase(
             gender="남성",
             likelihoodratio=("1.23", "10"),
             text_evidence="증1호~증3호",
@@ -273,7 +274,7 @@ class TestNFSReportPhraserWithRealData:
 
     def test_make_phrase_res(self):
         """make_phrase_res 함수 테스트"""
-        properties = NFS_RW.Properties_Phrase(
+        properties = NFS_RP.Properties_Phrase(
             gender="여성",
             likelihoodratio=("", ""),
             text_evidence="증4호",
@@ -291,7 +292,7 @@ class TestNFSReportPhraserWithRealData:
 
     def test_make_phrase_nd(self):
         """make_phrase_nd 함수 테스트"""
-        properties = NFS_RW.Properties_Phrase(
+        properties = NFS_RP.Properties_Phrase(
             gender="",
             likelihoodratio=("", ""),
             text_evidence="증5호~증7호",
@@ -309,7 +310,7 @@ class TestNFSReportPhraserWithRealData:
 
     def test_make_phrase_nc(self):
         """make_phrase_nc 함수 테스트"""
-        properties = NFS_RW.Properties_Phrase(
+        properties = NFS_RP.Properties_Phrase(
             gender="",
             likelihoodratio=("", ""),
             text_evidence="증8호",

@@ -70,26 +70,22 @@ class TestReportInfoToPhrasePipeline:
         pm_ystr.df_profile = df_profile_ystr
         info.load_ystr_profiledatamanager(pm_ystr)
 
-        # 2. ReportWriter 생성 및 분류
+        # 2. ReportWriter 생성 (블록 자동 생성)
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
 
-        # 3. Phrase 생성
-        initial_count = len(RW.phrases_result)
-
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
-        ref_count = len(RW.phrases_result) - initial_count
-
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
-        res_count = len(RW.phrases_result) - initial_count - ref_count
+        # 3. Phrase 생성 (새 구조)
+        RW.make_contents_default()
 
         # 4. 결과 검증
         total_phrases = len(RW.phrases_result)
 
+        # 블록 수 확인
+        str_blocks = RW.blocks_manager["STR"].blocks
+        total_blocks = sum(len(blocks) for blocks in str_blocks.values())
+
         print(f"\n✓ Report → Phrase 파이프라인 성공")
-        print(f"  - 대조 phrases: {ref_count}개")
-        print(f"  - 대표 phrases: {res_count}개")
-        print(f"  - 총 phrases: {total_phrases}개")
+        print(f"  - 총 블록 수: {total_blocks}개")
+        print(f"  - 생성된 phrases: {total_phrases}개")
 
         assert total_phrases >= 0
 
@@ -123,8 +119,8 @@ class TestMultipleCasesBatchProcessing:
                 pm_ystr.df_profile = df_profile_ystr
                 info.load_ystr_profiledatamanager(pm_ystr)
 
+                # ReportWriter 생성 (블록 자동 생성)
                 RW = NFS_RW.NFSReportWriter(info, [])
-                RW.categorize_profiles()
 
                 results.append({
                     'case_id': case_id,
@@ -166,17 +162,21 @@ class TestProfileTypeCategorization:
         pm_str.df_profile = df_profile_str
         info.load_str_profiledatamanager(pm_str)
 
+        # ReportWriter 생성 (블록 자동 생성)
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
 
-        # 분류 결과 확인
-        categorized_types = list(RW.code_categorized.keys())
+        # 블록 매니저 확인 (새 구조)
+        assert "STR" in RW.blocks_manager
+        assert "YSTR" in RW.blocks_manager
+
+        str_blocks = RW.blocks_manager["STR"].blocks
+        block_types = list(str_blocks.keys())
 
         print(f"\n✓ 프로필 타입별 분류:")
-        for ptype in categorized_types:
-            print(f"  - {ptype}: {len(RW.code_categorized[ptype])}개 코드")
+        for block_type in block_types:
+            print(f"  - {block_type}: {len(str_blocks[block_type])}개 블록")
 
-        assert isinstance(RW.code_categorized, dict)
+        assert isinstance(str_blocks, dict)
 
 
 class TestSTRAndYSTRSimultaneousProcessing:

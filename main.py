@@ -3,11 +3,11 @@ import module.NFS_PROFILEDATAMANAGER as NFS_PM
 import pandas as pd
 import module.NFS_REPORTINFORMATION as NFS_RI
 import module.NFS_REPORTWRITER as NFS_RW
-import module.NFS_REPORTPHRASER as NFS_RP
+import module.constants_reportwriter as REPORT_TYPER
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.CRITICAL,
     format='[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s:%(lineno)d] - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -60,21 +60,7 @@ logger.info("NFSReportWriter 객체 생성")
 RW = NFS_RW.NFSReportWriter(info, [])
 
 logger.info("프로필 분류 시작")
-RW.categorize_profiles()
-
-logger.info("대조 프로필 문구 생성 시작")
-RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
-
-logger.info("대표 프로필 문구 생성 시작")
-RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
-
-logger.info("ND 프로필 문구 생성 시작")
-RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nd, type_profile='ND')
-
-logger.info("NC 프로필 문구 생성 시작")
-RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nc, type_profile='NC')
-
-logger.info(f"생성된 프로필 블록 수: {len(RW.profile_blocks)}")
+RW.make_contents_result(REPORT_TYPER.REPORT_TYPE_PHRASERS["default"])
 print(RW.phrases_result)
 
 logger.info("========== 프로그램 종료 ==========")

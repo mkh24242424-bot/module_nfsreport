@@ -107,10 +107,10 @@ class TestMainWorkflowE2E:
         print(f"  - STR 프로필: 로드됨")
         print(f"  - YSTR 프로필: 로드됨")
 
-    def test_04_report_writer_creation_and_categorization(self, df_caseinfo, df_report,
+    def test_04_report_writer_creation_and_block_generation(self, df_caseinfo, df_report,
                                                            df_profile_str, df_profile_ystr,
                                                            sample_case_id):
-        """4. ReportWriter 생성 및 categorize_profiles() 실행"""
+        """4. ReportWriter 생성 및 블록 자동 생성 검증"""
         # 데이터 준비
         info = NFS_RI.NFSReportInformation(id_case=sample_case_id)
         info.extract_caseinfo_from_df(df_caseinfo)
@@ -124,29 +124,33 @@ class TestMainWorkflowE2E:
         pm_ystr.df_profile = df_profile_ystr
         info.load_ystr_profiledatamanager(pm_ystr)
 
-        # NFSReportWriter 생성
+        # NFSReportWriter 생성 (블록이 자동으로 생성됨)
         RW = NFS_RW.NFSReportWriter(info, [])
 
         assert RW.report_data.id_case == sample_case_id, \
             f"예상 case ID: {sample_case_id}, 실제: {RW.report_data.id_case}"
         assert RW.paths_picture == [], "paths_picture가 빈 리스트가 아닙니다"
 
-        # 프로필 분류
-        RW.categorize_profiles()
+        # 블록 매니저가 생성되었는지 확인
+        assert hasattr(RW, 'blocks_manager'), "blocks_manager가 없습니다"
+        assert "STR" in RW.blocks_manager, "STR 블록 매니저가 없습니다"
+        assert "YSTR" in RW.blocks_manager, "YSTR 블록 매니저가 없습니다"
 
-        # code_categorized가 생성되었는지 확인
-        assert isinstance(RW.code_categorized, dict), "code_categorized가 dict가 아닙니다"
+        # STR 블록이 생성되었는지 확인
+        str_blocks = RW.blocks_manager["STR"].blocks
+        assert isinstance(str_blocks, dict), "STR blocks가 dict가 아닙니다"
+        assert '대조' in str_blocks, "대조 블록이 없습니다"
+        assert '대조일치' in str_blocks, "대조일치 블록이 없습니다"
 
-        print(f"\n✓ ReportWriter 생성 및 프로필 분류 성공:")
-        print(f"  - code_categorized keys: {list(RW.code_categorized.keys())}")
+        print(f"\n✓ ReportWriter 생성 및 블록 생성 성공:")
+        print(f"  - STR 블록 유형: {list(str_blocks.keys())}")
+        print(f"  - STR 대조 블록 수: {len(str_blocks['대조'])}")
+        print(f"  - STR 대조일치 블록 수: {len(str_blocks['대조일치'])}")
 
-        if hasattr(RW, 'categorized_info') and not RW.categorized_info.empty:
-            print(f"  - categorized_info shape: {RW.categorized_info.shape}")
-
-    def test_05_phrase_generation_ref(self, df_caseinfo, df_report,
+    def test_05_phrase_generation_default(self, df_caseinfo, df_report,
                                        df_profile_str, df_profile_ystr,
                                        sample_case_id, monkeypatch):
-        """5. 대조 phrase 생성 (make_phrase_ref)"""
+        """5. make_contents_default()로 전체 문구 생성"""
         # 사용자 입력 mock 처리 (식별지수 포함하도록 'n' 반환)
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
@@ -164,23 +168,22 @@ class TestMainWorkflowE2E:
         info.load_ystr_profiledatamanager(pm_ystr)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
 
-        # 대조 프로필 문구 생성
-        initial_phrases_count = len(RW.phrases_result)
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
+        # 전체 문구 생성
+        initial_count = len(RW.phrases_result)
+        RW.make_contents_default()
 
         # phrase가 추가되었는지 확인
-        assert len(RW.phrases_result) >= initial_phrases_count, \
-            f"phrase가 추가되지 않았습니다. 이전: {initial_phrases_count}, 이후: {len(RW.phrases_result)}"
+        assert len(RW.phrases_result) >= initial_count, \
+            f"phrase가 추가되지 않았습니다. 이전: {initial_count}, 이후: {len(RW.phrases_result)}"
 
-        print(f"\n✓ 대조 phrase 생성 성공:")
-        print(f"  - 생성된 phrase 수: {len(RW.phrases_result) - initial_phrases_count}")
+        print(f"\n✓ make_contents_default() 실행 성공:")
+        print(f"  - 생성된 phrase 수: {len(RW.phrases_result)}")
 
-    def test_06_phrase_generation_res(self, df_caseinfo, df_report,
+    def test_06_phrase_generation_str_blocks(self, df_caseinfo, df_report,
                                        df_profile_str, df_profile_ystr,
                                        sample_case_id, monkeypatch):
-        """6. 대표 phrase 생성 (make_phrase_res)"""
+        """6. STR 블록별 문구 생성 확인"""
         # 사용자 입력 mock 처리
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
@@ -198,24 +201,20 @@ class TestMainWorkflowE2E:
         info.load_ystr_profiledatamanager(pm_ystr)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
+        RW.make_contents_default()
 
-        # 대표 프로필 문구 생성
-        initial_phrases_count = len(RW.phrases_result)
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
+        # STR 블록 확인
+        str_blocks = RW.blocks_manager["STR"].blocks
 
-        # phrase가 추가되었는지 확인
-        assert len(RW.phrases_result) >= initial_phrases_count, \
-            f"phrase가 추가되지 않았습니다. 이전: {initial_phrases_count}, 이후: {len(RW.phrases_result)}"
+        print(f"\n✓ STR 블록별 문구 생성 확인:")
+        for block_type in ['대조', '대조일치', '대표일치', 'ND', 'NC']:
+            block_count = len(str_blocks[block_type])
+            print(f"  - {block_type}: {block_count}개 블록")
 
-        print(f"\n✓ 대표 phrase 생성 성공:")
-        print(f"  - 생성된 phrase 수: {len(RW.phrases_result) - initial_phrases_count}")
-
-    def test_07_phrase_generation_nd(self, df_caseinfo, df_report,
+    def test_07_phrase_generation_ystr_blocks(self, df_caseinfo, df_report,
                                       df_profile_str, df_profile_ystr,
                                       sample_case_id, monkeypatch):
-        """7. ND phrase 생성 (make_phrase_nd)"""
+        """7. Y-STR 블록별 문구 생성 확인"""
         # 사용자 입력 mock 처리
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
@@ -233,21 +232,20 @@ class TestMainWorkflowE2E:
         info.load_ystr_profiledatamanager(pm_ystr)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
+        RW.make_contents_default()
 
-        # ND 프로필 문구 생성
-        initial_phrases_count = len(RW.phrases_result)
-        RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nd, type_profile='ND')
+        # Y-STR 블록 확인
+        ystr_blocks = RW.blocks_manager["YSTR"].blocks
 
-        print(f"\n✓ ND phrase 생성 완료:")
-        print(f"  - 생성된 phrase 수: {len(RW.phrases_result) - initial_phrases_count}")
+        print(f"\n✓ Y-STR 블록별 문구 생성 확인:")
+        for block_type in ['대조', '대조일치', '대표일치', 'ND', 'NC']:
+            block_count = len(ystr_blocks[block_type])
+            print(f"  - {block_type}: {block_count}개 블록")
 
-    def test_08_phrase_generation_nc(self, df_caseinfo, df_report,
+    def test_08_block_profile_structure(self, df_caseinfo, df_report,
                                       df_profile_str, df_profile_ystr,
                                       sample_case_id, monkeypatch):
-        """8. NC phrase 생성 (make_phrase_nc)"""
+        """8. BlockProfile 구조 검증"""
         # 사용자 입력 mock 처리
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
@@ -265,22 +263,26 @@ class TestMainWorkflowE2E:
         info.load_ystr_profiledatamanager(pm_ystr)
 
         RW = NFS_RW.NFSReportWriter(info, [])
-        RW.categorize_profiles()
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
-        RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nd, type_profile='ND')
 
-        # NC 프로필 문구 생성
-        initial_phrases_count = len(RW.phrases_result)
-        RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nc, type_profile='NC')
+        # 블록 구조 확인 (대조 블록이 있다면)
+        str_blocks = RW.blocks_manager["STR"].blocks
+        if str_blocks['대조']:
+            block = str_blocks['대조'][0]
+            assert hasattr(block, 'idx_first'), "BlockProfile에 idx_first가 없습니다"
+            assert hasattr(block, 'nickname'), "BlockProfile에 nickname이 없습니다"
+            assert hasattr(block, 'text_table'), "BlockProfile에 text_table이 없습니다"
+            assert hasattr(block, 'text_phrase'), "BlockProfile에 text_phrase이 없습니다"
+            assert hasattr(block, 'id_ref'), "BlockProfile에 id_ref가 없습니다"
 
-        print(f"\n✓ NC phrase 생성 완료:")
-        print(f"  - 생성된 phrase 수: {len(RW.phrases_result) - initial_phrases_count}")
+            print(f"\n✓ BlockProfile 구조 검증 성공:")
+            print(f"  - idx_first: {block.idx_first}")
+            print(f"  - nickname: {block.nickname}")
+            print(f"  - id_ref: {block.id_ref}")
 
     def test_09_complete_workflow_final_validation(self, df_caseinfo, df_report,
                                                      df_profile_str, df_profile_ystr,
                                                      sample_case_id, monkeypatch):
-        """9. 전체 워크플로우 최종 검증 (main.py 완전 재현)"""
+        """9. 전체 워크플로우 최종 검증 (새 구조)"""
         # 사용자 입력 mock 처리
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
@@ -301,34 +303,34 @@ class TestMainWorkflowE2E:
         info.load_str_profiledatamanager(pm_str)
         info.load_ystr_profiledatamanager(pm_ystr)
 
-        # ReportWriter 생성
+        # ReportWriter 생성 (블록 자동 생성됨)
         RW = NFS_RW.NFSReportWriter(info, [])
 
-        # 프로필 분류
-        RW.categorize_profiles()
-
         # Phrase 생성
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_ref, type_profile='대조')
-        RW.make_contents_with_profile(phraser=NFS_RP.make_phrase_res, type_profile='대표')
-        RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nd, type_profile='ND')
-        RW.make_contents_without_profile(phraser=NFS_RP.make_phrase_nc, type_profile='NC')
+        RW.make_contents_default()
 
         # 최종 결과 검증
-        profile_blocks_count = len(RW.profile_blocks)
+        str_blocks = RW.blocks_manager["STR"].blocks
+        ystr_blocks = RW.blocks_manager["YSTR"].blocks
+
+        total_str_blocks = sum(len(blocks) for blocks in str_blocks.values())
+        total_ystr_blocks = sum(len(blocks) for blocks in ystr_blocks.values())
         phrases_count = len(RW.phrases_result)
 
         print(f"\n✓ 전체 워크플로우 완료:")
-        print(f"  - 생성된 프로필 블록 수: {profile_blocks_count}")
+        print(f"  - STR 블록 수: {total_str_blocks}")
+        print(f"  - Y-STR 블록 수: {total_ystr_blocks}")
         print(f"  - 생성된 phrase 수: {phrases_count}")
 
-        # 결과 출력 (main.py와 동일)
+        # 결과 출력
         if phrases_count > 0:
             print(f"\n📋 생성된 phrases (처음 3개):")
             for i, phrase in enumerate(RW.phrases_result[:3]):
                 print(f"  {i+1}. {phrase[:100]}..." if len(phrase) > 100 else f"  {i+1}. {phrase}")
 
         # 기본 검증
-        assert profile_blocks_count >= 0, "profile_blocks가 생성되지 않았습니다"
+        assert total_str_blocks >= 0, "STR 블록이 생성되지 않았습니다"
+        assert total_ystr_blocks >= 0, "Y-STR 블록이 생성되지 않았습니다"
         assert phrases_count >= 0, "phrases_result가 생성되지 않았습니다"
 
-        print(f"\n✓ main.py 워크플로우 재현 성공!")
+        print(f"\n✓ 새 구조 워크플로우 검증 성공!")

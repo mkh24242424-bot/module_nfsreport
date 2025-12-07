@@ -155,23 +155,45 @@ class TestProfileManagerIntegration:
             print(f"\n✓ 프로필 없음 (None 반환)")
 
 
-class TestReportWriterSwitchKit:
-    """ReportWriter의 kit 전환 테스트"""
+class TestReportWriterBlocksManager:
+    """ReportWriter의 blocks_manager 테스트"""
 
-    def test_switch_kit_property(self):
-        """switch_kit property 동작 확인"""
+    def test_blocks_manager_structure(self):
+        """blocks_manager 구조 확인"""
+        # 기본 evidenceinfo 구조 생성
         info = NFS_RI.NFSReportInformation(id_case="test")
+        info.evidenceinfo = pd.DataFrame({
+            '접수번호': [],
+            '감정물번호': [],
+            '감정물': [],
+            '분류': [],
+            '대조_이름': [],
+            'Y_대조_이름': [],
+            '프로필_유형': [],
+            'Y_프로필_유형': [],
+            '코드': [],
+            'Y_코드': [],
+            '표기번호': [],
+            'Y_표기번호': [],
+            '기재_여부': [],
+            'Y_기재_여부': [],
+            '타액_반응': [],
+            '정액_반응': [],
+            '혈흔_반응': [],
+            '검색_결과': [],
+            '반환_여부': []
+        })
+
         RW = NFS_RW.NFSReportWriter(info, [])
 
-        # switch_kit property 접근
-        switch = RW.switch_kit
+        # blocks_manager 구조 확인
+        assert hasattr(RW, 'blocks_manager')
+        assert "STR" in RW.blocks_manager
+        assert "YSTR" in RW.blocks_manager
+        assert hasattr(RW.blocks_manager["STR"], 'blocks')
+        assert hasattr(RW.blocks_manager["STR"], 'evidence_text_generator')
 
-        assert "STR" in switch
-        assert "YSTR" in switch
-        assert "code_categorized" in switch["STR"]
-        assert "profilemanager" in switch["STR"]
-
-        print(f"\n✓ switch_kit property 동작 확인")
+        print(f"\n✓ blocks_manager 구조 확인")
 
 
 class TestPhraseGenerationWithDifferentInputs:
@@ -189,7 +211,7 @@ class TestPhraseGenerationWithDifferentInputs:
         ]
 
         for text_evidence, desc in test_cases:
-            props = NFS_RW.Properties_Phrase(
+            props = NFS_RP.Properties_Phrase(
                 gender="남성",
                 likelihoodratio=("1.5", "10"),
                 text_evidence=text_evidence,
@@ -247,18 +269,21 @@ class TestCompleteIntegrationScenario:
         info.extract_caseinfo_from_df(df_caseinfo)
         info.extract_evidenceinfo_from_df(df_report)
 
-        # 3. ReportWriter 생성
+        # 3. ReportWriter 생성 (블록 자동 생성)
         RW = NFS_RW.NFSReportWriter(info, [])
 
-        # 4. 프로필 분류
-        RW.categorize_profiles()
-
-        # 5. 결과 검증
+        # 4. 결과 검증
         assert info.id_case == '2025-C-INT'
         assert len(info.evidenceinfo) == 2
-        assert isinstance(RW.code_categorized, dict)
+
+        # 블록 매니저 확인
+        assert hasattr(RW, 'blocks_manager')
+        assert "STR" in RW.blocks_manager
+
+        str_blocks = RW.blocks_manager["STR"].blocks
+        total_blocks = sum(len(blocks) for blocks in str_blocks.values())
 
         print(f"\n✓ 완전한 통합 시나리오 성공:")
         print(f"  - 사건번호: {info.id_case}")
         print(f"  - 증거물 수: {len(info.evidenceinfo)}")
-        print(f"  - 분류된 타입 수: {len(RW.code_categorized)}")
+        print(f"  - 생성된 블록 수: {total_blocks}")

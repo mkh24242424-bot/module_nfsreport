@@ -4,156 +4,622 @@ from typing import Dict, List, Literal, Callable
 from dataclasses import dataclass
 import pandas as pd
 from . import NFS_REPORTINFORMATION as NFS_RI
-from .NFS_REPORTPHRASER import Properties_Phrase
+from . import NFS_REPORTPHRASER as NFS_RP
+from .constants_reportwriter import REPORT_TYPE_PHRASERS, VALID_REPORT_TYPES
 from .exceptions import DataFrameOperationError, TemplateError
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
+
+COLNAME_PER_KIT = {
+    "STR" : {
+        "NICKNAME": "대조_이름",
+        "REPORTED": "기재_여부",
+        "TEXT_EVIDENCE": "표기번호",
+        "CODE" : "코드",
+        "TYPE" : "프로필_유형"
+    },
+    "YSTR" : {
+        "NICKNAME": "Y_대조_이름",
+        "REPORTED": "Y_기재_여부",
+        "TEXT_EVIDENCE": "Y_표기번호",
+        "CODE" : "Y_코드",
+        "TYPE" : "Y_프로필_유형"
+    }
+}
 
 @dataclass
-class Block_Profile:
+class BlockProfile:
     idx_first: str
     nickname: str
-    text_evidence: str
-    id_evidence: str
+    text_table: str
+    text_phrase: str
+    id_ref: str
 
-class NFSReportWriter():
-    """NFSReportInformation 인스턴스의 데이터를 토대로 HWP control을 사용하여 감정서를 작성하는 클래스"""
-    def __init__(self, report_data:NFS_RI.NFSReportInformation, paths_picture:list):
-        logger.info(f"NFSReportWriter 초기화 (id_case={report_data.id_case}, 사진 수={len(paths_picture)})")
-        self.report_data:NFS_RI.NFSReportInformation = report_data
-        self.paths_picture:list = paths_picture
 
-        self.code_categorized:Dict[str, List[str]] = {}
-        self.categorized_info:pd.DataFrame = pd.DataFrame({})
-        self.profile_blocks_ref:list = []
-        self.profile_blocks = []
+class BlockProfileManager:
+    """블록 프로필 관리 클래스
 
-        self.code_categorized_ystr:Dict[str, List[str]]  = {}
-        self.categorized_info_ystr:pd.DataFrame = pd.DataFrame({})
-        self.profile_blocks_ref_ystr:list = []
-        self.profile_blocks_ystr:list = []
+    증거물 정보를 프로필 유형별로 그룹화하고,
+    각 유형에 맞는 BlockProfile 객체를 생성합니다.
 
-        self.phrases_result:list = []
-        logger.debug("NFSReportWriter 초기화 완료")
+    주요 기능:
+    - 프로필 유형별 코드 그룹화 (대조, 대조일치, 대표일치, ND, NC)
+    - 멀티인덱스를 통한 빠른 데이터 조회
+    - 증거물 텍스트 자동 생성 (표기번호, 체액 반응 포함)
 
-    @property
-    def switch_kit(self) -> dict:
-        """키트별 변수 매핑을 동적으로 반환하는 property.
+    Attributes:
+        kit: 키트 종류 ("STR" 또는 "YSTR")
+        COL_NICKNAME: 키트별 대조 이름 컬럼명
+        COL_REPORTED: 키트별 기재 여부 컬럼명
+        COL_TEXT_EVIDENCE: 키트별 표기번호 컬럼명
+        COL_CODE: 키트별 코드 컬럼명
+        COL_TYPE: 키트별 프로필 유형 컬럼명
+        codes_groupby_type: 프로필 유형별 코드 딕셔너리
+        info_indexed: 멀티인덱스 DataFrame (코드, 유형)
+        blocks: 유형별 생성된 블록 딕셔너리
+        evidence_text_generator: 증거물 텍스트 생성기
 
-        재할당 문제 해결: self.code_categorized 등이 재할당되어도
-        항상 최신 값을 참조하도록 property로 구현.
+    Examples:
+        >>> info = df[df["기재_여부"] == "기재"]
+        >>> manager = BlockProfileManager(info, kit="STR")
+        >>> manager.generate_blocks()
+        >>> len(manager.blocks['대조'])
+        2
 
-        Returns:
-            STR/YSTR 키트별 변수 매핑 딕셔너리
+    See Also:
+        EvidenceTextGenerator: 증거물 텍스트 생성을 담당하는 헬퍼 클래스
+        NFSReportWriter: 이 매니저를 사용하는 상위 감정서 작성 클래스
+    """
+
+    def __init__(self, info_written: pd.DataFrame, kit: str = "STR"):
+        """블록 프로필 매니저 초기화
+
+        기재된 증거물 정보를 기반으로 프로필 블록을 관리하는 매니저를 초기화합니다.
+        증거물 유형별로 코드를 그룹화하고, 블록 생성을 위한 인덱싱을 수행합니다.
+
+        Args:
+            info_written: 기재된 증거물 정보 DataFrame (기재_여부 == "기재"로 필터링된 데이터)
+            kit: 키트 종류. 기본값은 "STR"
+
+        Raises:
+            ValueError: kit이 "STR" 또는 "YSTR"이 아닌 경우
+
+        Examples:
+            >>> info_written = df[df["기재_여부"] == "기재"]
+            >>> manager = BlockProfileManager(info_written=info_written, kit="STR")
+            >>> manager.generate_blocks()
         """
-        return {
-            "STR": {
-                "code_categorized": self.code_categorized,
-                "profilemanager": self.report_data.pm_str,
-                "info_indexed" : self.categorized_info,
-                "profile_blocks_ref" : self.profile_blocks_ref,
-                "profile_blocks" : self.profile_blocks,
-                "colname_nickname" : "대조_이름",
-                "colname_reported" : "기재_여부",
-                "colname_text_evidence" : "표기번호"
-            },
-            "YSTR": {
-                "code_categorized": self.code_categorized_ystr,
-                "profilemanager": self.report_data.pm_ystr,
-                "info_indexed" : self.categorized_info_ystr,
-                "profile_blocks_ref" : self.profile_blocks_ref_ystr,
-                "profile_blocks" : self.profile_blocks_ystr,
-                "colname_nickname" : "Y_대조_이름",
-                "colname_reported" : "Y_기재_여부",
-                "colname_text_evidence" : "Y_표기번호"
-            }
+        logger.debug(f"BlockProfileManager 초기화 시작 (kit={kit}, 증거물 수={len(info_written)})")
+
+        # 1. 입력 검증
+        if kit not in COLNAME_PER_KIT:
+            logger.error(f"잘못된 kit 값: {kit}. 'STR' 또는 'YSTR'이어야 합니다.")
+            raise ValueError(
+                f"kit은 'STR' 또는 'YSTR'이어야 합니다. 입력값: {kit}"
+            )
+
+        if len(info_written) == 0:
+            logger.debug("빈 DataFrame으로 초기화됨 (기재된 증거물 없음)")
+
+        # 2. 키트별 컬럼명 설정
+        col_config = COLNAME_PER_KIT[kit]
+        self.COL_NICKNAME = col_config["NICKNAME"]
+        self.COL_REPORTED = col_config["REPORTED"]
+        self.COL_TEXT_EVIDENCE = col_config["TEXT_EVIDENCE"]
+        self.COL_CODE = col_config["CODE"]
+        self.COL_TYPE = col_config["TYPE"]
+        self.kit = kit
+
+        # 3. 프로필 유형별 코드 그룹화
+        self.codes_groupby_type = (
+            info_written.groupby(self.COL_TYPE)[self.COL_CODE]
+            .unique()
+            .to_dict()
+        )
+        logger.debug(
+            f"프로필 유형별 코드 그룹화 완료 (유형 수={len(self.codes_groupby_type)})"
+        )
+
+        # 4. 멀티인덱스 생성 (코드, 유형으로 빠른 조회)
+        # reset_index()로 원본 인덱스를 'index' 컬럼으로 보존 (증거물 연속성 유지)
+        # set_index()로 (코드, 유형) 멀티인덱스 설정
+        self.info_indexed = (
+            info_written.reset_index()
+            .set_index([self.COL_CODE, self.COL_TYPE])
+        )
+
+        # 5. 블록 저장소 및 텍스트 생성기 초기화
+        self.blocks = {}
+        self.evidence_text_generator = EvidenceTextGenerator(info_written.copy())
+
+        logger.debug("BlockProfileManager 초기화 완료")
+
+    def generate_blocks(self):
+        """모든 블록 유형 생성
+
+        프로필 유형별로 블록을 생성하여 self.blocks에 저장합니다.
+        5가지 블록 유형을 생성:
+        - 대조: 대조 프로필 블록
+        - 대조일치: 대조 프로필과 일치하는 일반 프로필 블록
+        - 대표일치: 대표 프로필과 일치하는 일반 프로필 블록
+        - ND: No Data 블록
+        - NC: No Conclusion 블록
+
+        Examples:
+            >>> manager = BlockProfileManager(info_written, kit="STR")
+            >>> manager.generate_blocks()
+            >>> len(manager.blocks['대조'])
+            2
+
+        See Also:
+            _generate_blocks_ref: 대조 블록 생성
+            _generate_blocks_match: 일치 블록 생성
+            _generate_blocks_noprofile: ND/NC 블록 생성
+        """
+        logger.debug("블록 생성 시작")
+
+        # 1. 블록 저장소 초기화
+        self.blocks = {
+            '대조': [],
+            '대조일치': [],
+            '대표일치': [],
+            'ND': [],
+            'NC': []
         }
 
-    def categorize_profiles(self) -> None:
-        """ReportData.df_evidences를 유형별로 분류하여 정리.
+        # 2. 각 유형별 블록 생성
+        self.blocks['대조'].extend(self._generate_blocks_ref())
+        logger.debug(f"대조 블록 생성 완료 (개수={len(self.blocks['대조'])})")
 
-        - code_categorized: 코드-프로필_유형을 키-밸류로 정리하여 딕셔너리화
-        - df_str_indexed: ReportData.df_evidences를 MultiIndex로 설정하여 빠른 조회 가능
+        self.blocks['대조일치'].extend(self._generate_blocks_match(type_profile='대조'))
+        logger.debug(f"대조일치 블록 생성 완료 (개수={len(self.blocks['대조일치'])})")
+
+        self.blocks['대표일치'].extend(self._generate_blocks_match(type_profile='대표'))
+        logger.debug(f"대표일치 블록 생성 완료 (개수={len(self.blocks['대표일치'])})")
+
+        self.blocks['ND'].extend(self._generate_blocks_noprofile(type_profile='ND'))
+        logger.debug(f"ND 블록 생성 완료 (개수={len(self.blocks['ND'])})")
+
+        self.blocks['NC'].extend(self._generate_blocks_noprofile(type_profile='NC'))
+        logger.debug(f"NC 블록 생성 완료 (개수={len(self.blocks['NC'])})")
+
+        total_blocks = sum(len(blocks) for blocks in self.blocks.values())
+        logger.debug(f"블록 생성 완료 (총 {total_blocks}개)")
+
+    def _generate_block(
+        self,
+        info: pd.DataFrame,
+        id_ref: str,
+        nickname_ref: str = ""
+    ) -> BlockProfile:
+        """단일 블록 프로필 생성
+
+        증거물 정보 DataFrame으로부터 BlockProfile 객체를 생성합니다.
+        테이블용 텍스트와 구문용 텍스트(체액 반응 포함)를 각각 생성합니다.
+
+        빈 DataFrame이 전달될 경우 빈 텍스트를 가진 블록을 생성합니다.
+        (매치되는 일반 프로필이 없는 경우 발생 가능)
+
+        Args:
+            info: 증거물 정보 DataFrame. 필수 컬럼: 감정물번호, index (빈 DataFrame 허용)
+            id_ref: 참조 ID (감정물번호 또는 특수 코드 like ND/NC)
+            nickname_ref: 참조 닉네임. 기본값은 ""
+
+        Returns:
+            BlockProfile: 생성된 블록 프로필 객체
+
+        Examples:
+            >>> info = pd.DataFrame({
+            ...     "감정물번호": ["2025-C-1-1", "2025-C-1-2"],
+            ...     "index": [0, 1]
+            ... })
+            >>> block = manager._generate_block(info, "2025-C-1-1", "피의자")
+            >>> block.id_ref
+            "2025-C-1-1"
+
+            >>> # 빈 DataFrame도 허용
+            >>> empty_info = pd.DataFrame({})
+            >>> block = manager._generate_block(empty_info, "V1", "피해자")
+            >>> block.text_table
+            ""
         """
-        logger.info("프로필 분류 시작")
+        logger.debug(f"블록 생성 시작 (id_ref={id_ref}, 증거물 수={len(info)})")
 
-        def categorize_code(df: pd.DataFrame, column_prefix: str = "") -> Dict[str, List[str]]:
-            """코드를 프로필 유형에 따라 분류.
-            
-            Args:
-                df: 유형별 분류할 리포트 데이터프레임
-                column_prefix: 컬럼명 접두사 (Y-STR의 경우 'Y_')
-                
-            Returns:
-                프로필 유형별로 그룹화된 코드 딕셔너리 e.g {V: ['2025-C-3123-1'], S: ['2025-3123-2']}
-            """
+        # 1. 빈 DataFrame 처리
+        if len(info) == 0:
+            logger.warning(f"빈 DataFrame으로 블록 생성 (id_ref={id_ref})")
+            # 빈 블록 생성 (텍스트는 빈 문자열)
+            block = BlockProfile(
+                idx_first="",
+                nickname=nickname_ref,
+                text_table="",
+                id_ref=id_ref,
+                text_phrase=""
+            )
+            logger.debug(f"빈 블록 생성 완료 (id_ref={id_ref})")
+            return block
 
-            code_col = f"{column_prefix}코드"
-            profile_col = f"{column_prefix}프로필_유형"
+        # 2. 증거물 ID 추출
+        evidence_ids = list(info['감정물번호'])
+        logger.debug(f"증거물 ID 추출 완료 (개수={len(evidence_ids)})")
 
-            return df.groupby(profile_col)[code_col].unique().to_dict()
+        # 3. 증거물 텍스트 생성
+        text_table = self.evidence_text_generator.create_text_evidence(
+            list_id=evidence_ids,
+            kit=self.kit
+        )
+        text_phrase = self.evidence_text_generator.create_text_evidence(
+            list_id=evidence_ids,
+            kit=self.kit,
+            reaction=True
+        )
+
+        # 4. BlockProfile 객체 생성
+        block = BlockProfile(
+            idx_first=info.iloc[0]["index"],
+            nickname=nickname_ref,
+            text_table=text_table,
+            id_ref=id_ref,
+            text_phrase=text_phrase
+        )
+
+        logger.debug(f"블록 생성 완료 (idx_first={block.idx_first})")
+        return block        
+
+    def _generate_blocks_ref(self) -> list[BlockProfile]:
+        """대조 프로필 블록 생성
+
+        '대조' 유형의 프로필에 대한 블록을 생성합니다.
+        각 대조 코드별로 하나의 블록을 생성하며, 닉네임 정보를 포함합니다.
+
+        Returns:
+            list[BlockProfile]: 생성된 대조 블록 리스트. 대조 프로필이 없으면 빈 리스트
+
+        Examples:
+            >>> manager = BlockProfileManager(info_written, kit="STR")
+            >>> blocks = manager._generate_blocks_ref()
+            >>> len(blocks)
+            2
+            >>> blocks[0].nickname
+            "피의자"
+
+        See Also:
+            _generate_block: 단일 블록 생성 헬퍼
+        """
+        type_profile = "대조"
+        logger.debug(f"{type_profile} 블록 생성 시작")
+
+        # 1. 대조 유형 존재 여부 확인
+        if type_profile not in self.codes_groupby_type:
+            logger.debug(f"{type_profile} 유형이 없음 (빈 리스트 반환)")
+            return []
+
+        # 2. 각 대조 코드별 블록 생성
+        blocks = []
+        codes = self.codes_groupby_type[type_profile]
+        logger.debug(f"{type_profile} 코드 수: {len(codes)}")
+
+        for code in codes:
+            info_ref = self.info_indexed.loc[[(code, type_profile)], :]
+            id_ref = info_ref.iloc[0]["감정물번호"]
+            nickname_ref = info_ref.iloc[0][self.COL_NICKNAME]
+
+            block = self._generate_block(
+                info=info_ref,
+                id_ref=id_ref,
+                nickname_ref=nickname_ref
+            )
+            blocks.append(block)
+            logger.debug(f"대조 블록 생성 (code={code}, id_ref={id_ref}, nickname={nickname_ref})")
+
+        logger.debug(f"{type_profile} 블록 생성 완료 (총 {len(blocks)}개)")
+        return blocks
     
-        # STR 데이터 처리
-        logger.debug("STR 프로필 분류 중")
-        evidenceinfo_str = self.report_data.evidenceinfo[self.report_data.evidenceinfo["기재_여부"] == "기재"].copy()
-        self.code_categorized = categorize_code(df=evidenceinfo_str)
+    def _generate_blocks_match(
+        self,
+        type_profile: Literal["대표", "대조"]
+    ) -> list[BlockProfile]:
+        """일치 블록 생성 (대조일치 또는 대표일치)
 
-        # MultiIndex 설정 (기존 groupby 대체)
-        # reset_index()로 원본 인덱스를 "index" 컬럼으로 보존한 뒤 MultiIndex 설정
-        self.categorized_info = evidenceinfo_str.reset_index().set_index(["코드", "프로필_유형"])
-        logger.info(f"STR 프로필 분류 완료 (유형별: {dict((k, len(v)) for k, v in self.code_categorized.items())})")
+        지정된 프로필 유형(대조/대표)과 일치하는 일반 프로필들의 블록을 생성합니다.
 
-        # Y-STR 데이터 처리
-        logger.debug("YSTR 프로필 분류 중")
-        evidenceinfo_ystr = self.report_data.evidenceinfo[self.report_data.evidenceinfo["Y_기재_여부"] == "기재"].copy()
-        self.code_categorized_ystr = categorize_code(evidenceinfo_ystr, column_prefix="Y_")
+        처리 로직:
+        - 대조일치: 대조 프로필과 일치하는 일반 프로필들만 포함
+        - 대표일치: 대표 프로필 자체 + 일치하는 일반 프로필들 포함 (index 순으로 정렬)
 
-        # MultiIndex 설정 (기존 groupby 대체)
-        # reset_index()로 원본 인덱스를 "index" 컬럼으로 보존한 뒤 MultiIndex 설정
-        self.categorized_info_ystr = evidenceinfo_ystr.reset_index().set_index(["Y_코드", "Y_프로필_유형"])
-        self.categorized_info_ystr.sort_index(inplace=True)  # 조회 성능 향상을 위한 정렬
-        logger.info(f"YSTR 프로필 분류 완료 (유형별: {dict((k, len(v)) for k, v in self.code_categorized_ystr.items())})")
+        Args:
+            type_profile: 프로필 유형. "대조" 또는 "대표"
 
-    # ==================== Evidence Text Generation ====================
-    # 증거물 번호를 감정서 형식으로 변환하는 메서드들
+        Returns:
+            list[BlockProfile]: 생성된 일치 블록 리스트. 해당 유형이 없으면 빈 리스트
 
-    # 상수 정의
+        Examples:
+            >>> manager = BlockProfileManager(info_written, kit="STR")
+            >>> blocks = manager._generate_blocks_match(type_profile="대조")
+            >>> len(blocks)
+            1
+            >>> blocks[0].nickname
+            "피의자"
+
+        See Also:
+            _generate_block: 단일 블록 생성 헬퍼
+        """
+        logger.debug(f"{type_profile}일치 블록 생성 시작")
+
+        # 1. 프로필 유형 존재 여부 확인
+        if type_profile not in self.codes_groupby_type:
+            logger.debug(f"{type_profile} 유형이 없음 (빈 리스트 반환)")
+            return []
+
+        # 2. 각 코드별 일치 블록 생성
+        blocks = []
+        codes = self.codes_groupby_type[type_profile]
+        logger.debug(f"{type_profile} 코드 수: {len(codes)}")
+
+        for code in codes:
+            # 2-1. 참조 프로필 정보 추출
+            info_ref = self.info_indexed.loc[[(code, type_profile)], :]
+            id_ref = info_ref.iloc[0]["감정물번호"]
+            nickname_ref = info_ref.iloc[0][self.COL_NICKNAME]
+
+            # 2-2. 일치하는 일반 프로필 찾기
+            try:
+                info_match = self.info_indexed.loc[[(code, "일반")], :]
+                logger.debug(f"일치 정보 찾음 (code={code}, 행 수={len(info_match)})")
+            except KeyError:
+                # 일치하는 일반 프로필이 없는 경우 빈 DataFrame 사용
+                info_match = pd.DataFrame({})
+                logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code})")
+
+            # 2-3. 대표일치의 경우 대표 프로필 자체도 포함
+            if type_profile == "대표":
+                info_match = pd.concat([info_ref, info_match]).sort_values(by='index')
+                logger.debug(f"대표 프로필 포함 (총 행 수={len(info_match)})")
+
+            # 2-4. 블록 생성
+            block = self._generate_block(
+                info=info_match,
+                id_ref=id_ref,
+                nickname_ref=nickname_ref
+            )
+            blocks.append(block)
+            logger.debug(f"{type_profile}일치 블록 생성 (code={code}, id_ref={id_ref})")
+
+        logger.debug(f"{type_profile}일치 블록 생성 완료 (총 {len(blocks)}개)")
+        return blocks
+    
+    def _generate_blocks_noprofile(
+        self,
+        type_profile: Literal["ND", "NC"]
+    ) -> list[BlockProfile]:
+        """프로필 없음 블록 생성 (ND 또는 NC)
+
+        프로필이 없거나 결론을 내릴 수 없는 증거물들의 블록을 생성합니다.
+        - ND (No Data): DNA가 검출되지 않은 증거물
+        - NC (No Conclusion): 결론을 내릴 수 없는 증거물
+
+        Args:
+            type_profile: 프로필 유형. "ND" 또는 "NC"
+
+        Returns:
+            list[BlockProfile]: 생성된 블록 리스트.
+                해당 유형이 없으면 빈 리스트, 있으면 1개 요소 리스트
+
+        Examples:
+            >>> manager = BlockProfileManager(info_written, kit="STR")
+            >>> blocks = manager._generate_blocks_noprofile(type_profile="ND")
+            >>> len(blocks)
+            1
+            >>> blocks[0].id_ref
+            "ND"
+
+        See Also:
+            _generate_block: 단일 블록 생성 헬퍼
+        """
+        logger.debug(f"{type_profile} 블록 생성 시작")
+
+        try:
+            # ND/NC 유형의 일반 프로필 조회
+            info = self.info_indexed.loc[[(type_profile, "일반")], :]
+
+            # 블록 생성 (id_ref는 "ND" 또는 "NC")
+            block = self._generate_block(info, id_ref=type_profile)
+
+            logger.debug(f"{type_profile} 블록 생성 완료 (증거물 수={len(info)})")
+            return [block]
+
+        except KeyError:
+            # 해당 유형의 프로필이 없는 경우
+            logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
+            return []
+            
+            
+       
+class EvidenceTextGenerator:
+    """증거물 ID를 감정서 형식 텍스트로 변환
+
+    증거물 정보 DataFrame을 받아 감정물번호를 감정서에 사용되는
+    형식으로 변환합니다. 연속된 증거물은 "~"로 묶고,
+    체액 반응 정보를 괄호로 추가할 수 있습니다.
+
+    주요 기능:
+    - 연속 증거물 감지 및 범위 표현 (예: "증1호~증3호")
+    - 2개 증거물은 "및"로 연결 (예: "증1호 및 증3호")
+    - 체액 반응 정보 포맷팅 (예: "증1호(타액반응 양성)")
+    - 동일 반응 감지 및 통합 표시
+
+    Attributes:
+        evidenceinfo: 증거물 정보를 담은 pandas DataFrame
+
+    Class Constants:
+        REACTION_TYPES: 체액 반응 유형 매핑 (컬럼명 -> 표시명)
+        MIN_CHAIN_LENGTH: 범위 표현("~")을 사용할 최소 연속 개수 (기본값: 3)
+
+    Examples:
+        >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+        >>> gen.create_text_evidence(["2025-C-1-1", "2025-C-1-2", "2025-C-1-3"])
+        "증1호~증3호"
+
+        >>> gen.create_text_evidence(["2025-C-1-1", "2025-C-1-5"])
+        "증1호 및 증5호"
+
+        >>> gen.create_text_evidence(["2025-C-1-1"], reaction=True)
+        "증1호(타액반응 양성)"
+
+    See Also:
+        NFSReportWriter: 이 클래스를 사용하는 상위 보고서 작성 클래스
+    """
+
+    # ==================== 클래스 상수 ====================
     REACTION_TYPES = {
         "타액_반응": "타액반응",
         "정액_반응": "정액반응",
         "혈흔_반응": "혈흔반응"
     }
-    MIN_CHAIN_LENGTH = 3  # ~로 묶을 최소 연속 개수
+    MIN_CHAIN_LENGTH = 3
+
+    # ==================== 초기화 ====================
+
+    def __init__(self, evidenceinfo: pd.DataFrame):
+        """증거물 텍스트 생성기 초기화
+
+        증거물 정보 DataFrame을 받아 증거물 번호를 감정서 형식으로
+        변환하는 생성기를 초기화합니다.
+
+        Args:
+            evidenceinfo: 증거물 정보 DataFrame.
+                필수 컬럼: 감정물번호, 표기번호/Y_표기번호, 타액_반응, 정액_반응, 혈흔_반응
+
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> text = gen.create_text_evidence(["2025-C-1-1", "2025-C-1-2"])
+        """
+        logger.debug(f"EvidenceTextGenerator 초기화 (증거물 수={len(evidenceinfo)})")
+        self.evidenceinfo = evidenceinfo
+        logger.debug("EvidenceTextGenerator 초기화 완료")
+
+    # ==================== Public Interface ====================
+
+    def create_text_evidence(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
+        """증거물 ID를 감정서 형식 텍스트로 변환
+
+        증거물 ID 리스트를 받아 감정서에 사용되는 형식으로 변환합니다.
+        연속된 증거물은 "~"로 묶고, 체액 반응 정보를 괄호로 추가할 수 있습니다.
+
+        처리 파이프라인:
+        1. 증거물 ID로 DataFrame 필터링 (_filter_evidence_by_ids)
+        2. 특수 케이스 처리 (0개, 1개, 2개 증거물)
+        3. 체액 반응 정보 추가 (reaction=True인 경우, _add_reaction_info)
+        4. 연속된 증거물 그룹화 (_group_consecutive_evidence)
+        5. 최종 텍스트 포맷팅 (_format_evidence_text)
+
+        Args:
+            list_id: 증거물 ID 리스트 (감정물번호)
+            kit: 키트 종류. 기본값은 "STR"
+            reaction: 체액 반응 정보 포함 여부. 기본값은 False
+
+        Returns:
+            str: 포맷팅된 증거물 텍스트
+
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> gen.create_text_evidence(["2025-C-1-1", "2025-C-1-2", "2025-C-1-3"])
+            "증1호~증3호"
+
+            >>> gen.create_text_evidence(["2025-C-1-1", "2025-C-1-5"])
+            "증1호 및 증5호"
+
+            >>> gen.create_text_evidence(["2025-C-1-1"], reaction=True)
+            "증1호(타액반응 양성)"
+
+        See Also:
+            _filter_evidence_by_ids: 증거물 ID 필터링
+            _add_reaction_info: 체액 반응 정보 추가
+            _group_consecutive_evidence: 연속 증거물 그룹화
+            _format_evidence_text: 최종 텍스트 포맷팅
+        """
+        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+
+        # 1. 데이터 필터링
+        filtered_df = self._filter_evidence_by_ids(list_id, kit)
+
+        # 2. 체액 반응 값 생성
+        if reaction:
+            filtered_df = self._add_reaction_info(filtered_df)
+        
+
+        # 2. 특수 케이스 처리
+        evidence_count = len(filtered_df)
+
+        if evidence_count == 0:
+            logger.debug("빈 데이터프레임 (결과: 빈 문자열)")
+            return ""
+
+        if evidence_count == 1:
+            logger.debug("단일 증거물 처리")
+            result = filtered_df.iloc[0]["표기번호"]
+            logger.debug(f"증거물 텍스트 생성 완료: {result}")
+            return result
+
+        if evidence_count == 2:
+            logger.debug("2개 증거물 처리 ('및'로 연결)")
+            result = f"{filtered_df.iloc[0]['표기번호']} 및 {filtered_df.iloc[1]['표기번호']}"
+            logger.debug(f"증거물 텍스트 생성 완료: {result}")
+            return result
+
+        # 3. 3개 이상 증거물 처리
+        logger.debug(f"3개 이상 증거물 처리 (총 {evidence_count}개)")
+        evidence_chains = self._group_consecutive_evidence(filtered_df) # 연속 번호 그룹화
+        result = self._format_evidence_text(evidence_chains)
+        logger.debug(f"증거물 텍스트 생성 완료: {result}")
+        return result
+
+    # ==================== 데이터 전처리 ====================
 
     def _filter_evidence_by_ids(self, list_id: list, kit: str) -> pd.DataFrame:
-        """
-        감정물번호 리스트로 증거물 데이터 필터링
+        """감정물번호 리스트로 증거물 데이터 필터링 및 전처리
+
+        미기재 증거물을 제외하고, 지정된 감정물번호만 필터링합니다.
+        연속성 판단을 위해 다음 감정물번호 정보를 추가합니다.
 
         Args:
             list_id: 필터링할 감정물번호 리스트
-            kit: 키트 종류 ("STR" or "YSTR")
+            kit: 키트 종류. "STR" 또는 "YSTR"
 
         Returns:
-            필터링 및 전처리된 DataFrame
+            필터링 및 전처리된 DataFrame. 컬럼: 표기번호, 감정물번호_다음
+
+        Raises:
+            KeyError: kit이 "STR" 또는 "YSTR"이 아닌 경우
+
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> filtered = gen._filter_evidence_by_ids(["2025-C-1-1"], "STR")
+            >>> len(filtered)
+            1
         """
         logger.debug(f"증거물 필터링 시작 (kit={kit}, 입력 ID 수={len(list_id)})")
-        kit_data = self.switch_kit[kit]
-        df = self.report_data.evidenceinfo
+
+        # 키트별 컬럼명 결정
+        if kit not in COLNAME_PER_KIT:
+            logger.error(f"잘못된 kit 값: {kit}. 'STR' 또는 'YSTR'이어야 합니다.")
+            raise KeyError(f"kit은 'STR' 또는 'YSTR'이어야 합니다. 입력값: {kit}")
+
+        col_text_evidence = COLNAME_PER_KIT[kit]["TEXT_EVIDENCE"]
+
+        df = self.evidenceinfo
 
         # 1단계: 미기재 제외
         original_size = len(df)
-        df = df[df[kit_data["colname_text_evidence"]] != "미기재"].copy()
+        df = df[df[col_text_evidence] != "미기재"].copy()
         logger.debug(f"미기재 제외 (전: {original_size}, 후: {len(df)})")
 
         # 2단계: 표기번호 컬럼 추가
-        df['표기번호'] = df[kit_data["colname_text_evidence"]]
+        df['표기번호'] = df[col_text_evidence]
 
         # 3단계: 다음 감정물번호 추가 (list_id 필터링 전에 계산)
         # 이렇게 해야 원본 데이터셋에서의 실제 연속성을 정확히 판단할 수 있음
-        # 예: [1,2,3,4,5]에서 4가 미기재면 -> [1,2,3,5]가 되고, 3의 next는 5가 됨
-        # 하지만 list_id=[1,2,3,5,6]으로 필터하기 전에 계산하면 3의 next는 4가 됨
-        # 그래서 3->5는 연속이 아님을 감지할 수 있음
         df["감정물번호_다음"] = df["감정물번호"].shift(-1)
 
         # 4단계: 지정된 감정물번호만 필터링
@@ -162,98 +628,88 @@ class NFSReportWriter():
 
         return df.reset_index(drop=True)
 
-    def _format_single_reaction(self, reaction_type: str, value: str) -> str:
-        """
-        단일 체액 반응 결과를 포맷팅
+    # ==================== 체액 반응 처리 ====================
+
+    def _add_reaction_info(self, df: pd.DataFrame) -> pd.DataFrame:
+        """체액 반응 정보를 DataFrame에 추가
+
+        타액, 정액, 혈흔 반응 정보를 포맷팅하여 표기번호에 추가합니다.
+        모든 증거물의 반응이 동일한 경우 동일 반응 문자열을 반환합니다.
 
         Args:
-            reaction_type: 반응 유형 ("타액_반응", "정액_반응", "혈흔_반응")
-            value: 반응 결과 값
+            df: 증거물 DataFrame. 필수 컬럼: 타액_반응, 정액_반응, 혈흔_반응, 표기번호
 
         Returns:
-            포맷팅된 반응 문자열 (예: "타액반응 양성") 또는 빈 문자열
-        """
-        if value == "실험 안함":
-            return ""
-        return f"{self.REACTION_TYPES[reaction_type]} {value}"
+            반응 정보가 추가된 DataFrame
 
-    def _format_reaction_parentheses(self, reaction_text: str) -> str:
-        """
-        반응 결과를 괄호로 감싸기
-
-        Args:
-            reaction_text: 쉼표로 구분된 반응 문자열
-
-        Returns:
-            괄호로 감싼 문자열 (예: "(타액반응 양성, 혈흔반응 음성)")
-        """
-        parts = [x for x in reaction_text.split(",") if x]
-        if not parts:
-            return ""
-        return f"({', '.join(parts)})"
-
-    def _check_equivalent_reaction(self, df: pd.DataFrame) -> str:
-        """
-        모든 증거물의 반응이 동일한지 확인
-
-        Args:
-            df: 반응실험결과 컬럼이 있는 DataFrame
-
-        Returns:
-            모두 동일하면 "(모두 ...)" 형식의 문자열, 아니면 빈 문자열
-        """
-        if len(df) <= 1:
-            return ""
-
-        value_counts = df["반응실험결과"].value_counts()
-        if len(value_counts) == 1 and value_counts.iloc[0] == len(df):
-            # 모두 같은 반응
-            return df.iloc[-1]["반응실험결과"].replace("(", "(모두 ")
-        return ""
-
-    def _add_reaction_info(self, df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
-        """
-        체액 반응 정보를 DataFrame에 추가
-
-        Args:
-            df: 증거물 DataFrame
-
-        Returns:
-            (반응 정보가 추가된 DataFrame, 동일 반응 문자열)
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> df = pd.DataFrame({
+            ...     "표기번호": ["증1호"],
+            ...     "타액_반응": ["양성"],
+            ...     "정액_반응": ["실험 안함"],
+            ...     "혈흔_반응": ["음성"]
+            ... })
+            >>> df_result, equiv = gen._add_reaction_info(df)
+            >>> df_result["표기번호"].iloc[0]
+            "증1호(타액반응 양성, 혈흔반응 음성)"
         """
         logger.debug(f"체액 반응 정보 처리 시작 (데이터 수={len(df)})")
-        # 각 반응 유형 처리
-        reactions = []
-        for col in ["타액_반응", "정액_반응", "혈흔_반응"]:
-            reactions.append(df[col].apply(lambda x: self._format_single_reaction(col, x)))
 
-        # 반응 결과 결합
-        combined = reactions[0] + "," + reactions[1] + "," + reactions[2]
+        def format_row_reactions(row):
+            """한 행의 모든 반응을 포맷팅"""
+            reactions = []
+            for reaction_col, reaction_name in self.REACTION_TYPES.items():
+                value = row[reaction_col]
+                if value != "실험 안함":
+                    reactions.append(f"{reaction_name} {value}")
 
-        # 빈 문자열 제거 및 괄호 추가
-        df["반응실험결과"] = combined.apply(self._format_reaction_parentheses)
+            if reactions:
+                return f"({', '.join(reactions)})"
+            return ""
 
-        # 모두 같은 반응이면 한 번만 표시
-        equivalent_reaction = self._check_equivalent_reaction(df)
-        if equivalent_reaction:
-            logger.debug(f"동일 반응 감지: {equivalent_reaction}")
-            df["반응실험결과"] = ""
+        # 각 행에 대해 반응 포맷팅
+        df["반응실험결과"] = df.apply(format_row_reactions, axis=1)
+
+        # 모든 반응이 동일한지 확인 (2개 이상일 때만)
+        if len(df) > 1:
+            unique_reactions = df["반응실험결과"].unique()
+            if len(unique_reactions) == 1 and unique_reactions[0] != "":
+                # 모두 같은 반응이면 마지막만 "(모두 ...)" 형태로 남기고 나머지는 빈 문자열
+                equivalent_reaction = unique_reactions[0].replace("(", "(모두 ")
+                df["반응실험결과"] = ""
+                df.at[df.index[-1], "반응실험결과"] = equivalent_reaction
+                logger.debug(f"동일 반응 감지: {equivalent_reaction}")
 
         # 표기번호에 반응 추가
         df["표기번호"] = df["표기번호"] + df["반응실험결과"]
         logger.debug("체액 반응 정보 처리 완료")
 
-        return df, equivalent_reaction
+        return df
+
+    # ==================== 증거물 그룹화 및 포맷팅 ====================
 
     def _group_consecutive_evidence(self, df: pd.DataFrame) -> list[list[str]]:
-        """
-        연속된 증거물 번호를 그룹화
+        """연속된 증거물 번호를 그룹화
+
+        감정물번호가 연속되고 괄호(반응 정보)가 없는 증거물들을
+        하나의 그룹으로 묶습니다. 연속성은 '감정물번호_다음' 컬럼으로 판단합니다.
 
         Args:
-            df: 증거물 DataFrame
+            df: 증거물 DataFrame. 필수 컬럼: 표기번호, 감정물번호, 감정물번호_다음
 
         Returns:
-            그룹화된 표기번호 리스트 (예: [["증1호", "증2호", "증3호"], ["증5호"]])
+            그룹화된 표기번호 리스트의 리스트
+
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> df = pd.DataFrame({
+            ...     "표기번호": ["증1호", "증2호", "증3호", "증5호"],
+            ...     "감정물번호": ["2025-C-1-1", "2025-C-1-2", "2025-C-1-3", "2025-C-1-5"],
+            ...     "감정물번호_다음": ["2025-C-1-2", "2025-C-1-3", "2025-C-1-5", None]
+            ... })
+            >>> gen._group_consecutive_evidence(df)
+            [["증1호", "증2호", "증3호"], ["증5호"]]
         """
         logger.debug(f"연속 번호 그룹화 시작 (데이터 수={len(df)})")
         if len(df) == 0:
@@ -287,15 +743,26 @@ class NFSReportWriter():
         return chains
 
     def _format_evidence_text(self, chains: list[list[str]], equivalent_reaction: str = "") -> str:
-        """
-        그룹화된 증거물을 문자열로 포맷팅
+        """그룹화된 증거물을 문자열로 포맷팅
+
+        그룹화된 표기번호 리스트를 감정서 형식으로 포맷팅합니다.
+        3개 이상 연속된 경우 "증1호~증3호" 형식으로 표현합니다.
 
         Args:
             chains: 그룹화된 표기번호 리스트
-            equivalent_reaction: 동일 반응 문자열
+            equivalent_reaction: 동일 반응 문자열. 기본값 ""
 
         Returns:
-            포맷팅된 증거물 문자열 (예: "증1호~증3호, 증5호")
+            포맷팅된 증거물 문자열
+
+        Examples:
+            >>> gen = EvidenceTextGenerator(evidenceinfo_df)
+            >>> chains = [["증1호", "증2호", "증3호"], ["증5호"]]
+            >>> gen._format_evidence_text(chains)
+            "증1호~증3호, 증5호"
+            >>> chains = [["증1호", "증2호"]]
+            >>> gen._format_evidence_text(chains)
+            "증1호, 증2호"
         """
         logger.debug(f"증거물 텍스트 포맷팅 시작 (그룹 수={len(chains)})")
         formatted_chains = []
@@ -317,232 +784,261 @@ class NFSReportWriter():
         logger.debug(f"증거물 텍스트 포맷팅 완료: {final_result[:100] if len(final_result) <= 100 else final_result[:100] + '...'}")
         return final_result
 
-    def _create_text_evidence(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
-        """
-        증거물 번호를 감정서 형식으로 변환
 
-        연속된 감정물번호는 ~로 묶어 표현하며, 체액 반응 정보를 포함할 수 있습니다.
-        기존 123줄 메서드를 6개의 작은 헬퍼 메서드로 분리하여 리팩토링했습니다.
+class NFSReportWriter:
+    """NFS 감정서 작성 클래스
 
-        개선사항:
-        - 단일 책임 원칙 적용
-        - 복잡도 감소 (13+ → 5)
-        - 테스트 가능한 작은 단위로 분리
-        - 명확한 메서드명으로 의도 전달
+    NFSReportInformation 데이터를 기반으로 HWP control을 사용하여
+    법의학 DNA 감정서를 작성합니다. STR과 Y-STR 두 키트 유형을
+    모두 처리하며, 각 프로필 유형별로 적절한 문구를 생성합니다.
+
+    Attributes:
+        report_data: 감정서 작성에 필요한 모든 데이터
+        paths_picture: 감정서에 삽입할 사진 파일 경로 리스트
+        blocks_manager: 키트별 블록 프로필 매니저 (STR, YSTR)
+        phrases_result: 생성된 감정 결과 문구 리스트
+
+    Examples:
+        >>> info = NFSReportInformation(id_case="2025-C-6845")
+        >>> writer = NFSReportWriter(info, ["/path/pic1.jpg"])
+        >>> writer.make_contents_default()
+    """
+
+    def __init__(
+        self,
+        report_data: NFS_RI.NFSReportInformation,
+        paths_picture: list[str]
+    ):
+        """감정서 작성기 초기화
+
+        감정서 데이터와 사진 경로를 받아 초기화하고,
+        STR/Y-STR 키트별 블록 매니저를 생성합니다.
 
         Args:
-            list_id: 증거물 번호 리스트
-            kit: 키트 종류 ("STR" or "YSTR")
-            reaction: 체액 반응 포함 여부
-
-        Returns:
-            포맷팅된 증거물 문자열 (예: "증1호~증3호")
+            report_data: 감정서 작성 데이터
+            paths_picture: 사진 파일 경로 리스트
 
         Examples:
-            >>> writer._create_text_evidence(["2023-D-1-1", "2023-D-1-2", "2023-D-1-3"])
-            "증1호~증3호"
-
-            >>> writer._create_text_evidence(["2023-D-1-1"], reaction=True)
-            "증1호(타액반응 양성)"
+            >>> info = NFSReportInformation(id_case="2025-C-6845")
+            >>> writer = NFSReportWriter(report_data=info, paths_picture=[])
         """
-        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+        logger.info(
+            f"NFSReportWriter 초기화 시작 "
+            f"(id_case={report_data.id_case}, 사진 수={len(paths_picture)})"
+        )
 
-        # 1. 데이터 필터링
-        df = self._filter_evidence_by_ids(list_id, kit)
+        # 1. 기본 속성 설정
+        self.report_data: NFS_RI.NFSReportInformation = report_data
+        self.paths_picture: list[str] = paths_picture
 
-        # 2. 특수 케이스 처리
-        if len(df) == 0:
-            logger.debug("빈 데이터프레임 (결과: 빈 문자열)")
-            return ""
-        if len(df) == 1:
-            # 단일 증거물
-            logger.debug("단일 증거물 처리")
-            if reaction:
-                df, equiv = self._add_reaction_info(df)
-                result = df.iloc[0]["표기번호"] + equiv
-                logger.debug(f"증거물 텍스트 생성 완료: {result}")
-                return result
-            result = df.iloc[0]["표기번호"]
-            logger.debug(f"증거물 텍스트 생성 완료: {result}")
-            return result
-        if len(df) == 2:
-            # 두 개 증거물: "및"로 연결
-            logger.debug("2개 증거물 처리 ('및'로 연결)")
-            if reaction:
-                df, equiv = self._add_reaction_info(df)
-            result = f"{df.iloc[0]['표기번호']} 및 {df.iloc[1]['표기번호']}"
-            logger.debug(f"증거물 텍스트 생성 완료: {result}")
-            return result
+        # 2. STR 블록 매니저 생성
+        info_written_str = report_data.evidenceinfo[
+            report_data.evidenceinfo["기재_여부"] == "기재"
+        ]
+        logger.debug(f"STR 기재 증거물 수: {len(info_written_str)}")
 
-        # 3. 체액 반응 처리
-        logger.debug(f"3개 이상 증거물 처리 (총 {len(df)}개)")
-        equivalent_reaction = ""
-        if reaction:
-            df, equivalent_reaction = self._add_reaction_info(df)
+        blocks_manager_str = BlockProfileManager(
+            info_written=info_written_str,
+            kit='STR'
+        )
+        blocks_manager_str.generate_blocks()
 
-        # 4. 연속 번호 그룹화
-        chains = self._group_consecutive_evidence(df)
+        # 3. Y-STR 블록 매니저 생성
+        info_written_ystr = report_data.evidenceinfo[
+            report_data.evidenceinfo["Y_기재_여부"] == "기재"
+        ]
+        logger.debug(f"Y-STR 기재 증거물 수: {len(info_written_ystr)}")
 
-        # 5. 최종 문자열 생성
-        result = self._format_evidence_text(chains, equivalent_reaction)
-        logger.debug(f"증거물 텍스트 생성 완료: {result}")
-        return result
+        blocks_manager_ystr = BlockProfileManager(
+            info_written=info_written_ystr,
+            kit='YSTR'
+        )
+        blocks_manager_ystr.generate_blocks()
+
+        # 4. 블록 매니저 딕셔너리 설정
+        self.blocks_manager = {
+            "STR": blocks_manager_str,
+            "YSTR": blocks_manager_ystr
+        }
+
+        # 5. 결과 문구 저장소 초기화
+        self.phrases_result: list[str] = []
+
+        logger.debug("NFSReportWriter 초기화 완료")
+
 
     # ==================== Profile Content Generation ====================
+    def _make_contents_from_block(
+        self,
+        block: BlockProfile,
+        phraser: Callable,
+        kit: Literal["STR", "YSTR"] = "STR"
+    ) -> str:
+        """블록 프로필로부터 감정 결과 문구 생성
 
-    def _get_match_info(self, var_kit: dict, code: str) -> pd.DataFrame:
-        """일치 프로필 정보를 가져오며, 없으면 빈 데이터프레임 반환"""
-        try:
-            info_match = var_kit['info_indexed'].loc[[(code, "일반")], :]
-            logger.debug(f"일치 정보 행 수: {len(info_match) if isinstance(info_match, pd.DataFrame) else 1}")
-            return info_match
-        except KeyError as e:
-            logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code}): 빈 데이터프레임 사용")
-            return pd.DataFrame({})
+        BlockProfile과 phraser 함수를 사용하여 감정서 결과 문구를 생성합니다.
+        성별과 우도비(likelihood ratio)를 추출하여 Properties_Phrase 객체를 만들고,
+        phraser 함수에 전달합니다.
 
-    def _create_reference_block(self, info_ref: pd.DataFrame, id_ref: str, nickname_ref: str,
-                                var_kit: dict, kit: str) -> None:
-        """대조 프로필 블록을 생성하여 var_kit에 추가"""
-        logger.debug("대조 프로필 블록 생성 시작")
-        linked_text_ref = self._create_text_evidence(list_id=[id_ref], kit=kit)
-        block_ref = Block_Profile(
-            idx_first=info_ref.iloc[0]["index"],
-            nickname=nickname_ref,
-            text_evidence=linked_text_ref,
-            id_evidence=id_ref
-        )
-        var_kit["profile_blocks_ref"].append(block_ref)
-        logger.debug(f"대조 프로필 블록 생성 완료 (text={linked_text_ref})")
+        Args:
+            block: 블록 프로필 객체
+            phraser: 문구 생성 함수 (Properties_Phrase -> str)
+            kit: 키트 종류. 기본값은 "STR"
 
-    def _merge_representative_and_match(self, info_ref: pd.DataFrame, info_match: pd.DataFrame) -> pd.DataFrame:
-        """대표 프로필과 일치 프로필을 병합"""
-        logger.debug("대표 프로필과 일치 프로필 병합 시작")
-        merged = pd.concat([info_ref, info_match]).sort_values(by='index')
-        logger.debug(f"병합 후 총 행 수: {len(merged)}")
-        return merged
+        Returns:
+            str: 생성된 감정 결과 문구
 
-    def _extract_profile_properties(self, kit: str, id_ref: str) -> tuple:
-        """프로필 속성(성별, 개인식별지수) 추출"""
+        Examples:
+            >>> block = BlockProfile(...)
+            >>> phrase = writer._make_contents_from_block(block, make_phrase_ref, "STR")
+
+        See Also:
+            NFS_REPORTPHRASER.make_phrase_ref: 대조 문구 생성
+            NFS_REPORTPHRASER.make_phrase_res: 대표 문구 생성
+        """
+        logger.debug(f"결과 문구 생성 시작 (kit={kit}, id_ref={block.id_ref})")
+
+        # 1. 키트별 ProfileDataManager 선택
         if kit == "STR":
-            logger.debug("성별 및 개인식별지수 추출 시작")
-            gender = self.report_data.pm_str.extract_gender_from_profile(id_ref) if self.report_data.pm_str is not None else ""
-            lr = self.report_data.pm_str.calculate_likelihood_from_profile(id_ref) if self.report_data.pm_str is not None else ("0", "0")
-            logger.debug(f"성별: {gender}, 개인식별지수: {lr[0]}x10^{lr[1]}")
-            return gender, lr
-        else:
-            return "", ("0", "0")
+            profile_manager = self.report_data.pm_str
+        else:  # YSTR
+            profile_manager = self.report_data.pm_ystr
 
-    def _call_phraser_with_error_handling(self, phraser: Callable, properties: Properties_Phrase) -> str:
-        """Phraser 함수 호출 및 에러 처리"""
+        # 2. 성별 및 우도비 추출 (예외 처리)
         try:
-            logger.debug("감정서 문구 생성 중 (phraser 호출)")
-            phrase = phraser(properties)
-            self.phrases_result.append(phrase)
-            logger.info(f"문구 생성 완료 ({len(phrase)}자): {phrase[:80] if len(phrase) <= 80 else phrase[:80] + '...'}")
-            return phrase
-        except TypeError as e:
-            logger.error(f"감정서 문구 템플릿 오류 (phraser={phraser.__name__}): {e}")
-            raise TemplateError(phraser.__name__, e) from e
-
-    def _create_and_append_block(self, info_match: pd.DataFrame, id_evidence: str, var_kit: dict,
-                                  kit: str, nickname: str = "") -> None:
-        """프로필 블록을 생성하여 var_kit에 추가"""
-        logger.debug("프로필 블록 생성 시작")
-        linked_text_match = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit).replace(" 및 ", ", ")
-        block_match = Block_Profile(
-            idx_first=info_match.iloc[0]["index"],
-            nickname=nickname,
-            text_evidence=linked_text_match,
-            id_evidence=id_evidence
-        )
-        var_kit["profile_blocks"].append(block_match)
-        logger.debug(f"프로필 블록 생성 완료 (text={linked_text_match})")
-
-    def _generate_phrase_and_blocks(self, info_match: pd.DataFrame, id_ref: str, nickname_ref: str,
-                                     var_kit: dict, kit: str, phraser: Callable,
-                                     gender: str, lr: tuple) -> None:
-        """문구와 블록을 생성하여 추가"""
-        logger.debug(f"증거물 텍스트 생성 시작 (증거물 수={len(info_match)})")
-        if len(info_match):
-            text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
-            properties = Properties_Phrase(
-                gender=gender,
-                likelihoodratio=lr,
-                text_evidence=text_evidence,
-                nickname=nickname_ref
+            if profile_manager is not None:
+                gender = profile_manager.extract_gender_from_profile(block.id_ref)
+                lr = profile_manager.calculate_likelihood_from_profile(block.id_ref)
+                logger.debug(f"프로필 정보 추출 완료 (gender={gender}, lr={lr})")
+            else:
+                gender = ""
+                lr = ("0", "0")
+                logger.warning(
+                    f"{kit} ProfileDataManager가 None입니다 "
+                    f"(id_ref={block.id_ref}): 기본값 사용"
+                )
+        except Exception as e:
+            logger.warning(
+                f"프로필 정보 추출 실패 (kit={kit}, id_ref={block.id_ref}): {e}. "
+                f"기본값 사용"
             )
-            logger.debug(f"Properties 생성 완료 (nickname={nickname_ref}, evidence={text_evidence[:30]}...)")
+            gender = ""
+            lr = ("0", "0")
 
-            # 문장생성
-            self._call_phraser_with_error_handling(phraser, properties)
+        # 3. Properties_Phrase 객체 생성
+        properties = NFS_RP.Properties_Phrase(
+            gender=gender,
+            likelihoodratio=lr,
+            text_evidence=block.text_phrase,
+            nickname=block.nickname
+        )
 
-            # 일치 프로필 블록 생성
-            self._create_and_append_block(info_match, id_ref, var_kit, kit)
+        # 4. Phraser 함수 호출
+        phrase = phraser(properties)
+        logger.debug(f"결과 문구 생성 완료 (길이={len(phrase)})")
+        return phrase
 
-    def make_contents_with_profile(self, phraser: Callable, type_profile:Literal["대표", "대조"], kit:Literal["STR", "YSTR"]="STR") -> None:
+    def make_contents_result(
+        self,
+        phrasers: Dict[str, Dict[str, Callable]]
+    ) -> None:
+        """외부에서 제공된 phraser 매핑으로 감정 결과 문구 생성
+
+        블록 유형별로 지정된 phraser 함수를 사용하여 모든 블록의
+        감정 결과 문구를 생성합니다.
+
+        Args:
+            phrasers: Phraser 매핑 딕셔너리
+                구조: {kit: {block_type: phraser_function}}
+                예: {"STR": {"대조": make_phrase_deceased, ...}, "YSTR": {...}}
+
+        Raises:
+            ValueError: phrasers가 올바른 구조가 아닐 경우
+            KeyError: 필요한 kit 또는 block_type이 누락된 경우
+
+        Examples:
+            >>> from module.constants_reportwriter import REPORT_TYPE_PHRASERS
+            >>> RW = NFSReportWriter(info, [])
+            >>> RW.make_contents_result(REPORT_TYPE_PHRASERS["suspect"])
         """
-            감정서에 들어갈 프로필이 존재하는 증거물(대표, 대조, 일치)에 대한 결과 문구를 작성
+        logger.debug(f"make_contents_result 시작 (phraser 타입 수={len(phrasers)})")
+
+        # 1. 검증: 필수 kit이 모두 있는지 확인
+        required_kits = ("STR", "YSTR")
+        for kit in required_kits:
+            if kit not in phrasers:
+                raise ValueError(f"phrasers에 '{kit}' kit이 누락되었습니다.")
+
+        # 2. STR 및 YSTR 키트 처리
+        for kit in required_kits:
+            logger.debug(f"{kit} 블록 처리 시작")
+            block_manager = self.blocks_manager[kit]
+            kit_phrasers = phrasers[kit]
+
+            # 3. 각 블록 유형별 처리
+            for block_type in kit_phrasers:
+                # 블록이 존재하지 않으면 스킵
+                if block_type not in block_manager.blocks:
+                    logger.warning(f"{kit}의 '{block_type}' 블록 타입이 존재하지 않습니다.")
+                    continue
+
+                blocks = block_manager.blocks[block_type]
+                phraser = kit_phrasers[block_type]
+
+                for block in blocks:
+                    phrase = self._make_contents_from_block(
+                        block,
+                        phraser=phraser,
+                        kit=kit
+                    )
+                    self.phrases_result.append(phrase)
+                    logger.debug(
+                        f"{kit} {block_type} 문구 생성 "
+                        f"(id_ref={block.id_ref}, nickname={block.nickname})"
+                    )
+
+                if blocks:
+                    logger.debug(
+                        f"{kit} {block_type} 처리 완료 (블록 수={len(blocks)})"
+                    )
+
+            logger.debug(f"{kit} 블록 처리 완료")
+
+        logger.info(f"make_contents_result 완료 (총 문구 수={len(self.phrases_result)})")
+
+    def make_contents_default(self) -> None:
+        """기본 감정서 타입으로 감정 결과 문구 생성 (backward compatibility)
+
+        report_data.report_type을 확인하여 해당하는 phraser 매핑을 사용합니다.
+        report_type이 "default"이거나 정의되지 않은 경우 기본 매핑을 사용합니다.
+
+        Examples:
+            >>> RW = NFSReportWriter(info, [])
+            >>> RW.make_contents_default()  # Uses report_type from info
         """
-        logger.info(f"프로필 문구 생성 시작 (type_profile={type_profile}, kit={kit})")
-        var_kit = self.switch_kit[kit]
+        # Get report type from report_data
+        report_type = getattr(self.report_data, 'report_type', 'default')
 
-        if type_profile not in var_kit["code_categorized"].keys():
-            logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
-            return
+        # Validate report type
+        if report_type not in VALID_REPORT_TYPES:
+            logger.warning(
+                f"알 수 없는 report_type '{report_type}'. "
+                f"기본값 'default'를 사용합니다. "
+                f"유효한 타입: {VALID_REPORT_TYPES}"
+            )
+            report_type = 'default'
 
-        logger.info(f"{type_profile} 프로필 {len(var_kit['code_categorized'][type_profile])}개 발견")
-        for idx, code in enumerate(var_kit["code_categorized"][type_profile], 1):
-            logger.info(f"[{idx}/{len(var_kit['code_categorized'][type_profile])}] 프로필 처리 중 (code={code}, type={type_profile})")
+        logger.info(f"make_contents_default 시작 (report_type={report_type})")
 
-            # 1. 참조 정보 및 일치 정보 가져오기
-            info_ref = var_kit['info_indexed'].loc[[(code, type_profile)], :]
-            logger.debug(f"참조 정보 행 수: {len(info_ref) if isinstance(info_ref, pd.DataFrame) else 1}")
-            info_match = self._get_match_info(var_kit, code)
+        # Get phrasers for this report type
+        phrasers = REPORT_TYPE_PHRASERS[report_type]
 
-            id_ref = info_ref.iloc[0]["감정물번호"]
-            nickname_ref = str(info_ref.iloc[0][var_kit["colname_nickname"]])
-            logger.info(f"참조 프로필 정보 (id={id_ref}, nickname={nickname_ref})")
+        # Delegate to make_contents_result
+        self.make_contents_result(phrasers)
+        
 
-            # 2. 타입별 처리
-            if type_profile == "대조":
-                self._create_reference_block(info_ref, id_ref, nickname_ref, var_kit, kit)
-            elif type_profile == "대표":
-                info_match = self._merge_representative_and_match(info_ref, info_match)
 
-            # 3. 프로필 속성 추출 및 문구/블록 생성
-            gender, lr = self._extract_profile_properties(kit, id_ref)
-            self._generate_phrase_and_blocks(info_match, id_ref, nickname_ref, var_kit, kit, phraser, gender, lr)
 
-        logger.info(f"프로필 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
-    
-    def make_contents_without_profile(self, phraser: Callable, type_profile:Literal["ND", "NC"], kit:Literal["STR", "YSTR"]="STR") -> None:
-        """
-        감정서에 들어갈 프로필이 존재하지 않는 증거물(NC, ND)에 대한 결과 문구를 작성
-        """
-        logger.info(f"프로필 없는 문구 생성 시작 (type_profile={type_profile}, kit={kit})")
-        var_kit = self.switch_kit[kit]
-        try:
-            info_match = var_kit['info_indexed'].loc[[(type_profile, "일반")], :]
-            evidence_count = len(info_match) if isinstance(info_match, pd.DataFrame) else 1
-            logger.info(f"{type_profile} 프로필 {evidence_count}개 발견")
-            logger.debug(f"처리할 증거물 ID: {list(info_match['감정물번호'])}")
-
-            logger.debug("증거물 텍스트 생성 중 (반응 포함)")
-            text_evidence = self._create_text_evidence(list_id=list(info_match['감정물번호']), kit=kit, reaction=True)
-            properties = Properties_Phrase(
-                    gender="",
-                    likelihoodratio=("",""),
-                    text_evidence=text_evidence,
-                    nickname=type_profile) #본문에 들어갈 text_evidence에는 반응여부 넣는다:reaction=True
-            logger.debug(f"Properties 생성 완료 (type={type_profile}, evidence={text_evidence[:50]}...)")
-
-            # 문장생성
-            self._call_phraser_with_error_handling(phraser, properties)
-
-            # 프로필 블록 생성
-            self._create_and_append_block(info_match, type_profile, var_kit, kit)
-        except KeyError as e:
-            logger.info(f"{e}: {type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
-        logger.info(f"프로필 없는 문구 생성 완료 (type_profile={type_profile}, kit={kit}, 생성된 문구={len(self.phrases_result)}, 생성된 블록 수={len(var_kit['profile_blocks'])})")
-
+            
+            
 

@@ -10,7 +10,7 @@ import module.NFS_PROFILEDATAMANAGER as NFS_PM
 import module.NFS_REPORTINFORMATION as NFS_RI
 import module.NFS_REPORTWRITER as NFS_RW
 import module.NFS_REPORTPHRASER as NFS_RP
-from module.NFS_DATAFRAME import link_num_evidence, sort_by_serial_number
+from module.NFS_DATAFRAME import sort_by_serial_number
 
 
 class TestSTRProfileInline:
@@ -104,18 +104,22 @@ class TestNFSProfileDataManagerInline:
         """STR 마커 확인"""
         pm = NFS_PM.NFSProfileDataManager(kit="STR")
 
-        assert "STR" in pm.DICT_MARKERS
-        assert "AMEL" in pm.DICT_MARKERS["STR"]
-        assert "D3S1358" in pm.DICT_MARKERS["STR"]
-        assert len(pm.DICT_MARKERS["STR"]) == 24
+        # DICT_MARKERS는 모듈 상수 직접 사용
+        from module.constants_strprofile import DICT_MARKERS
+        assert "STR" in DICT_MARKERS
+        assert "AMEL" in DICT_MARKERS["STR"]
+        assert "D3S1358" in DICT_MARKERS["STR"]
+        assert len(DICT_MARKERS["STR"]) == 24
 
     def test_dict_markers_ystr(self):
         """YSTR 마커 확인"""
         pm = NFS_PM.NFSProfileDataManager(kit="YSTR")
 
-        assert "YSTR" in pm.DICT_MARKERS
-        assert "DYS576" in pm.DICT_MARKERS["YSTR"]
-        assert len(pm.DICT_MARKERS["YSTR"]) == 20
+        # DICT_MARKERS는 모듈 상수 직접 사용
+        from module.constants_strprofile import DICT_MARKERS
+        assert "YSTR" in DICT_MARKERS
+        assert "DYS576" in DICT_MARKERS["YSTR"]
+        assert len(DICT_MARKERS["YSTR"]) == 20
 
     # create_empty_strprofile 메서드는 실제로 존재하지 않으므로 테스트 제거
 
@@ -128,16 +132,16 @@ class TestNFSReportInformationInline:
         info = NFS_RI.NFSReportInformation()
 
         assert info.id_case == "noname"
-        assert info.type_case == "default"
+        assert info.report_type == "default"
         assert info.caseinfo == {}
         assert info.evidenceinfo.empty
 
     def test_initialization_with_params(self):
         """파라미터와 함께 초기화"""
-        info = NFS_RI.NFSReportInformation(id_case="2025-C-1234", type_case="test")
+        info = NFS_RI.NFSReportInformation(id_case="2025-C-1234", report_type="test")
 
         assert info.id_case == "2025-C-1234"
-        assert info.type_case == "test"
+        assert info.report_type == "test"
 
     def test_extract_caseinfo_from_df(self):
         """사건정보 추출 (인라인 DataFrame)"""
@@ -192,16 +196,44 @@ class TestNFSReportWriterInline:
 
     def test_initialization(self):
         """ReportWriter 초기화"""
+        # 기본 evidenceinfo 구조를 가진 ReportInformation 생성
         info = NFS_RI.NFSReportInformation(id_case="test")
+        info.evidenceinfo = pd.DataFrame({
+            '접수번호': [],
+            '감정물번호': [],
+            '감정물': [],
+            '분류': [],
+            '대조_이름': [],
+            'Y_대조_이름': [],
+            '프로필_유형': [],
+            'Y_프로필_유형': [],
+            '코드': [],
+            'Y_코드': [],
+            '표기번호': [],
+            'Y_표기번호': [],
+            '기재_여부': [],
+            'Y_기재_여부': [],
+            '타액_반응': [],
+            '정액_반응': [],
+            '혈흔_반응': [],
+            '검색_결과': [],
+            '반환_여부': []
+        })
+
         rw = NFS_RW.NFSReportWriter(info, [])
 
         assert rw.report_data.id_case == "test"
         assert rw.paths_picture == []
         assert rw.phrases_result == []
 
+        # 블록 매니저가 생성되었는지 확인
+        assert hasattr(rw, 'blocks_manager')
+        assert "STR" in rw.blocks_manager
+        assert "YSTR" in rw.blocks_manager
+
     def test_properties_phrase_dataclass(self):
         """Properties_Phrase 데이터클래스"""
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="남성",
             likelihoodratio=("1.5", "12"),
             text_evidence="증1호~증3호",
@@ -214,12 +246,13 @@ class TestNFSReportWriterInline:
         assert props.nickname == "피의자A"
 
     def test_block_profile_dataclass(self):
-        """Block_Profile 데이터클래스"""
-        block = NFS_RW.Block_Profile(
+        """BlockProfile 데이터클래스"""
+        block = NFS_RW.BlockProfile(
             idx_first="0",
             nickname="피의자A",
-            text_evidence="증1호",
-            id_evidence="2025-C-1234-1"
+            text_table="증1호",
+            id_ref="2025-C-1234-1",
+            text_phrase=""
         )
 
         assert block.idx_first == "0"
@@ -233,7 +266,7 @@ class TestNFSReportPhraserInline:
         """일반 대조 phrase (식별지수 포함)"""
         monkeypatch.setattr('builtins.input', lambda x: 'n')
 
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="남성",
             likelihoodratio=("1.5", "12"),
             text_evidence="증1호~증3호",
@@ -251,7 +284,7 @@ class TestNFSReportPhraserInline:
         """피해자 대조 phrase (식별지수 제외)"""
         monkeypatch.setattr('builtins.input', lambda x: 'y')
 
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="여성",
             likelihoodratio=("2.0", "15"),
             text_evidence="증4호",
@@ -265,7 +298,7 @@ class TestNFSReportPhraserInline:
 
     def test_make_phrase_res(self):
         """대표 phrase"""
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="",
             likelihoodratio=("", ""),
             text_evidence="증5호",
@@ -278,7 +311,7 @@ class TestNFSReportPhraserInline:
 
     def test_make_phrase_nd(self):
         """ND phrase"""
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="",
             likelihoodratio=("", ""),
             text_evidence="증6호~증8호",
@@ -291,7 +324,7 @@ class TestNFSReportPhraserInline:
 
     def test_make_phrase_nc(self):
         """NC phrase"""
-        props = NFS_RW.Properties_Phrase(
+        props = NFS_RP.Properties_Phrase(
             gender="",
             likelihoodratio=("", ""),
             text_evidence="증9호",
@@ -305,67 +338,6 @@ class TestNFSReportPhraserInline:
 
 class TestDataFrameUtilsInline:
     """DataFrame 유틸리티 함수들 단위 테스트 (인라인 데이터)"""
-
-    def test_link_num_evidence_single(self):
-        """단일 증거물"""
-        df = pd.DataFrame({
-            '표기번호': ['증1호'],
-            '타액_반응': [''],
-            '정액_반응': [''],
-            '혈흔_반응': ['']
-        })
-
-        result = link_num_evidence(df, '표기번호', y23=False)
-
-        # 실제 동작: 빈 체액 반응도 출력에 포함됨
-        assert "증1호" in result
-        assert "타액반응" in result or "정액반응" in result or "혈흔반응" in result
-
-    def test_link_num_evidence_two_with_and(self):
-        """2개 증거물 (및으로 연결)"""
-        df = pd.DataFrame({
-            '표기번호': ['증1호', '증3호'],  # 비연속
-            '타액_반응': ['', ''],
-            '정액_반응': ['', ''],
-            '혈흔_반응': ['', '']
-        }, index=[0, 2])  # 인덱스도 비연속
-
-        result = link_num_evidence(df, '표기번호', y23=False)
-
-        # 실제 동작: 각 증거물에 체액 반응이 포함됨
-        assert "증1호" in result
-        assert "증3호" in result
-        assert "및" in result
-
-    def test_link_num_evidence_consecutive(self):
-        """연속된 증거물 (~로 연결)"""
-        df = pd.DataFrame({
-            '표기번호': ['증1호', '증2호', '증3호'],
-            '타액_반응': ['', '', ''],
-            '정액_반응': ['', '', ''],
-            '혈흔_반응': ['', '', '']
-        }, index=[0, 1, 2])  # 연속 인덱스
-
-        result = link_num_evidence(df, '표기번호', y23=False)
-
-        # 실제 동작: 각 증거물별로 체액 반응을 표시
-        assert "증1호" in result
-        assert "증2호" in result
-        assert "증3호" in result
-
-    def test_link_num_evidence_with_reaction(self):
-        """체액 반응 포함"""
-        df = pd.DataFrame({
-            '표기번호': ['증1호', '증2호'],
-            '타액_반응': ['+', ''],
-            '정액_반응': ['', '+'],
-            '혈흔_반응': ['', '']
-        }, index=[0, 1])
-
-        result = link_num_evidence(df, '표기번호', y23=False)
-
-        assert "타액" in result
-        assert "정액" in result
 
     def test_sort_by_serial_number(self):
         """일련번호 자연 정렬"""
