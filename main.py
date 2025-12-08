@@ -88,11 +88,13 @@ RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr)
 logger.info("프로필 분류 시작")
 RW.make_contents_result(REPORT_TYPER.REPORT_TYPE_PHRASERS["deceased_only"])
 print(RW.phrases_result)
-#----------------------------------------------------------
+
 logger.info("한글 포맷터 객체 생성")
 path_base = os.path.dirname(os.path.abspath(__file__))
 hwp_formatter = NFS_HWP.NFS_HWPFormatter(type_report="DEFAULT", path_base=path_base, code_case=info.id_case)
 
+logger.info("사건 기본 정보 입력")
+hwp_formatter.fill_field_caseinfo(info.caseinfo)
 
 logger.info("========== 프로그램 종료 ==========")
 

@@ -2,6 +2,7 @@ import logging
 from . import NFS_PROFILEDATAMANAGER as NFS_PM
 from .exceptions import CaseNotFoundError
 import pandas as pd
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ class NFSReportInformation:
         logger.debug(f"사건정보 추출 시작 (id_case={self.id_case})")
 
         # 1. 필수 컬럼 정의
-        required_columns = ['의뢰관서', '문서번호', '접수일자', '시행일자']
+        required_columns = ['의뢰관서', '문서번호', '접수일자', '시행일자', '접수번호']
 
         # 2. 필수 컬럼 존재 여부 검증
         missing_columns = set(required_columns) - set(df_caseinfo.columns)
@@ -121,6 +122,14 @@ class NFSReportInformation:
 
             # 6. 첫 번째 행을 딕셔너리로 변환 및 저장
             self.caseinfo = filtered_df.iloc[0].to_dict()
+
+            # 7. 결과를 감정서에 쓰이는 포멧으로 변환
+            # 접수일자와 시행일자를 '년 월 일' 형식으로 변환, 문서번호와 접수번호에 '호' 추가
+            for date_field in ['접수일자', '시행일자']:
+                date_obj = datetime.strptime(self.caseinfo[date_field], "%Y.%m.%d")
+                self.caseinfo[date_field] = f"({date_obj.year}년 {date_obj.month}월 {date_obj.day}일)"
+            for date_field in ['문서번호', '접수번호']:
+                self.caseinfo[date_field] = self.caseinfo[date_field] + '호'
 
             logger.info(
                 f"사건정보 추출 완료 (id_case={self.id_case}, "

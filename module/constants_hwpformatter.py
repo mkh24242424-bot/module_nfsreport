@@ -4,3 +4,11 @@ PATH_HWP_TEMPLATE ={
     # "suspect": "path/to/suspect_form.hwp",
     # "paternity": "path/to/paternity_form.hwp",
 }
+
+NAME_CELLFIELD ={
+    "의뢰관서": "goansuname",
+    "문서번호": "munsuno",
+    "접수일자": "jubsudate",
+    "시행일자": "sihangdate",
+    "접수번호": "jubsuno",
+}
