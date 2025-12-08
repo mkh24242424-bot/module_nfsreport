@@ -4,7 +4,7 @@ import os, shutil
 
 
 class NFS_HWPFormatter:
-    def __init__(self, type_report: str, path_base:str, code_case: str):
+    def __init__(self, type_report: str, path_base:str, code_case: str, ):
         self.hwp = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")  # type: ignore
         self.hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModuleExample")
         self.hwp.XHwpWindows.Item(0).Visible = True

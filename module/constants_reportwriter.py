@@ -28,6 +28,12 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
             "NC": NFS_RP.make_phrase_nc_y,
         }
     },
+    "deceased_only":{
+        "STR": {
+            "대조": NFS_RP.make_phrase_deceased,
+        },
+        "YSTR": {}
+    }
     # Future report types can be added here
     # "suspect": {...},
     # "paternity": {...},
