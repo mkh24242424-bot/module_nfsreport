@@ -201,9 +201,8 @@ class NFSProfileDataManager:
         df_analyzed.loc[duplicated_mask, "STATUS_COMBINED"] = "DUPLICATED"
 
         # 복사된 데이터는 Sample Name에 '+'를 추가해 별개의 프로필로 취급
-        df_analyzed.loc[duplicated_mask, "Sample Name"] = (
-            df_analyzed.loc[duplicated_mask, "Sample Name"] + "+"
-        )
+        df_analyzed.loc[duplicated_mask, "Sample Name"] = str(df_analyzed.loc[duplicated_mask, "Sample Name"]) + "+"
+        
 
         # 분류 결과 통계
         status_counts = df_analyzed["STATUS_COMBINED"].value_counts().to_dict()
@@ -438,7 +437,7 @@ class NFSProfileDataManager:
                 allele_count += 1
         return allele_count
 
-    def _resolve_duplicate_profile(self, data_old: pd.Series, data_new: pd.Series) -> int:
+    def _resolve_duplicate_profile(self, data_old: pd.Series, data_new: pd.Series) -> object:
         """중복된 프로필 중 제거할 프로필의 인덱스 결정
 
         concatenate()에서 사용되는 헬퍼 메서드.

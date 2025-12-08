@@ -160,7 +160,7 @@ def archived_export_to_str(
     code_evidence: str,
     list_marker: list,
     y23: bool = True,
-    DICT_MARKERS: dict = None,
+    DICT_MARKERS: dict = {},
     TA_THRESHOLD: int = 2,
     export_df_in_set_func = None
 ) -> Tuple[Dict[str, str], List[str]]:

@@ -1,9 +1,11 @@
 import logging
+import os
 import module.NFS_PROFILEDATAMANAGER as NFS_PM
 import pandas as pd
 import module.NFS_REPORTINFORMATION as NFS_RI
 import module.NFS_REPORTWRITER as NFS_RW
 import module.constants_reportwriter as REPORT_TYPER
+import module.NFS_HWPFORMATTER as NFS_HWP
 
 # 로깅 설정
 logging.basicConfig(
@@ -42,7 +44,7 @@ pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
 logger.info("NFSReportInformation 객체 생성 (id_case=2025-C-6745)")
-info = NFS_RI.NFSReportInformation(id_case='2025-C-6845')
+info = NFS_RI.NFSReportInformation(id_case='2025-C-6745')
 
 logger.info("사건 정보 추출 시작")
 info.extract_caseinfo_from_df(df_caseinfo)
@@ -62,6 +64,11 @@ RW = NFS_RW.NFSReportWriter(info, [])
 logger.info("프로필 분류 시작")
 RW.make_contents_result(REPORT_TYPER.REPORT_TYPE_PHRASERS["default"])
 print(RW.phrases_result)
+#----------------------------------------------------------
+logger.info("한글 포맷터 객체 생성")
+path_base = os.path.dirname(os.path.abspath(__file__))
+hwp_formatter = NFS_HWP.NFS_HWPFormatter(type_report="DEFAULT", path_base=path_base, code_case=info.id_case)
+
 
 logger.info("========== 프로그램 종료 ==========")
 
