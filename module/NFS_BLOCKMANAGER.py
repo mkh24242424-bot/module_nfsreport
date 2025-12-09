@@ -129,6 +129,12 @@ class BlockProfileManager:
         self.evidence_text_generator = EvidenceTextGenerator(info_written.copy())
 
         logger.debug("BlockProfileManager 초기화 완료")
+    
+    @property
+    def number_of_blocks(self) -> int:
+        """생성된 블록의 총 개수 반환"""
+        total_blocks = sum(len(blocks) for blocks in self.blocks.values())
+        return total_blocks
 
     def generate_blocks(self):
         """모든 블록 유형 생성
@@ -160,7 +166,7 @@ class BlockProfileManager:
             '대조일치': [],
             '대표일치': [],
             'ND': [],
-            'NC': []
+            'NC': [] # 추후에 필요시 블록 종류 추가 가능, 예) LC = 정량 결과 농도 낮아 실험하지 않음, NX: 특정 이유로 실험하지 않음.
         }
 
         # 2. 각 유형별 블록 생성

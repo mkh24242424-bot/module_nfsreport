@@ -20,7 +20,15 @@ class NFS_HWPFormatter:
         for field, value in NAME_CELLFIELD.items():
             if field in caseinfo:
                 self.hwp_control.PutFieldText(value, caseinfo[field])
-        
+    
+    def fill_field_evidence(self, evidence_text: str):
+        self.hwp_control.PutFieldText(NAME_CELLFIELD['감정물'], evidence_text)
+
+    def fill_field_experiment_method(self, experiment_method: str):
+        self.hwp_control.PutFieldText(NAME_CELLFIELD['실험방법'], experiment_method)
+    
+    def fill_field_result(self, phrase_result: str):
+        self.hwp_control.PutFieldText(NAME_CELLFIELD['실험결과'], phrase_result)
 
     def save_and_quit(self, save_path: str):
         self.hwp_control.SaveAs(save_path)

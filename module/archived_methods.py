@@ -319,3 +319,98 @@ profile_dict, notes = archived_export_to_str(
 print("프로필:", profile_dict)
 print("특이사항:", notes)
 """
+
+
+    def make_contents_common_result(self) -> None:
+        """공통으로 쓰이는 결과 문구를 정리하는 메소드.
+        검색결과, 실험 안함 정리.
+        """
+
+        def make_contents_search() -> None:
+            """검색결과 정리"""
+            df_search = self.df_report[self.df_report["검색_결과"] != "검색 안함"]
+            phrase_result = ""
+            for idx, result in df_search.iterrows():
+                if result["검색_결과"] == "결과 없음":
+                    list_suspect = ["피의자", "피혐의자", "용의자", "관계자", "참고인"]
+                    if any(suspect in result["대조_이름"] for suspect in list_suspect):
+                        phrase_result = (
+                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과 일치 건 없음.\r\n"
+                        )
+                    else:
+                        phrase_result = (
+                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과 "
+                            f"일치 건(범죄 현장 등, 구속피의자 등 및 수형인 등) 없음.\r\n"
+                        )
+                    if result["프로필_유형"] == "대표":
+                        self.dict_flags_etc["db_store"] = True
+                elif result["검색_결과"] == "과거건 일치":
+                    if (
+                        self.type_report == "피의자 대조-일치"
+                    ):  # 피의자 대조 시 첫문장에 대조 요청 건에 대한 결과를 쓰기 때문에 특수 처리.
+                        phrase_result = (
+                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
+                            f"연관건 외 일치 건 없음.\r\n "
+                        )
+                    else:
+                        phrase_result = (
+                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
+                            f"다음 [표]의 사건에서 확보된 디엔에이형과 일치하고, "
+                            f"구속피의자 등 및 수형인 등과 일치 건 없음.\r\n "
+                        )
+                    if result["프로필_유형"] == "대표":
+                        self.dict_flags_etc["db_store"] = True
+                    elif result["프로필_유형"] == "대조":
+                        self.dict_flags_etc["db_deletion"] = True
+                elif result["검색_결과"] == "수형인 일치":
+                    phrase_result = (
+                        f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                        f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, 수형인 등과 일치 건 있음.\r\n"
+                    )
+                    self.dict_flags_etc["db_deletion"] = True
+                    self.dict_flags_etc["db_prosecution"] = True
+                elif result["검색_결과"] == "구속피의자 일치":
+                    code_arrestee, ok = QInputDialog.getText(
+                        None,
+                        "구속피의자 식별코드",
+                        "구속피의자 식별코드를 입력하세요. (e.g. 201406P00163A)",
+                    )
+                    if not ok:
+                        code_arrestee = "xxxxxxxx"
+                    phrase_result = (
+                        f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
+                        f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
+                        f"구속피의자 식별코드 “{code_arrestee}”의 디엔에이형과 일치함.\r\n"
+                    )
+                    if self.type_report != "부검":
+                        lh = self.NPDM_STR.calculate_likelihood_from_profile(
+                            result["감정물번호"]
+                        )
+                        phrase_result = (
+                            phrase_result
+                            + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {lh[0]} x 10{lh[1]}임.\r\n"
+                        )
+                        self.dict_flags_etc["db_deletion"] = True
+                        self.dict_flags_etc["mp"] = True
+                if phrase_result != "":
+                    self.phrases_result.append(phrase_result)
+
+        def make_contents_noexperiment() -> None:
+            """실험 안함 정리."""
+            df_noexp = self.df_report[self.df_report["기재_여부"] == "실험 안함"]
+            if df_noexp.shape[0]:
+                linked_num_noexp = self.chain_num_evidence(
+                    list_samplenames=list(df_noexp["감정물번호"]),
+                    y23=False,
+                    reaction=True,
+                )
+                phrase_noexp = f"{linked_num_noexp}는 실험하지 않음.\r\n"
+                self.phrases_result.append(phrase_noexp)
+
+        make_contents_search()
+        make_contents_noexperiment()
+

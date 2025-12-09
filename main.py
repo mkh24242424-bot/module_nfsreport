@@ -82,12 +82,9 @@ blocks_manager_ystr = NFS_BM.BlockProfileManager(
 )
 blocks_manager_ystr.generate_blocks()
 
+type_report = "deceased_only"
 logger.info("NFSReportWriter 객체 생성")
-RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr)
-
-logger.info("프로필 분류 시작")
-RW.make_contents_result(REPORT_TYPER.REPORT_TYPE_PHRASERS["deceased_only"])
-print(RW.phrases_result)
+RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr, type_report=type_report)
 
 logger.info("한글 포맷터 객체 생성")
 path_base = os.path.dirname(os.path.abspath(__file__))
@@ -95,6 +92,18 @@ hwp_formatter = NFS_HWP.NFS_HWPFormatter(type_report="DEFAULT", path_base=path_b
 
 logger.info("사건 기본 정보 입력")
 hwp_formatter.fill_field_caseinfo(info.caseinfo)
+
+logger.info("감정물명 입력")
+evidence_text = RW.make_contents_evidence()
+hwp_formatter.fill_field_evidence(evidence_text)
+
+logger.info("실험방법 입력")
+experiment_method = RW.make_contents_experiment_methods()
+hwp_formatter.fill_field_experiment_method(experiment_method)
+
+logger.info("감정결과 입력")
+phrase_result = RW.make_contents_result()
+hwp_formatter.fill_field_result(phrase_result)
 
 logger.info("========== 프로그램 종료 ==========")
 

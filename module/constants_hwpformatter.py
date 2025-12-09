@@ -11,4 +11,7 @@ NAME_CELLFIELD ={
     "접수일자": "jubsudate",
     "시행일자": "sihangdate",
     "접수번호": "jubsuno",
+    "감정물": "gamjungmul",
+    "실험방법": "experiment_method",
+    "실험결과": "phrase_result"
 }

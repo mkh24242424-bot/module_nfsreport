@@ -39,8 +39,24 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
     # "paternity": {...},
 }
 
+KEYWORD_IGNORE_EVIDENCE = ["소변", "슬라이드"]
+KEYWORD_NONSTUFF = ['면봉', '소변', '혈액', '음모', '늑연골', '구강키트', '심낭혈', '꽁초', '손톱', '질액']
 
+PHRASE_EXPERIMENT_METHOD = "STR 유전자형 분석법(NFS-QI-DAM-01:2025)."
+PHRASE_EXPERIMENT_METHOD_YSTR = "1) STR 유전자형 분석법(NFS-QI-DAM-01:2025).\r\n2) Y-STR 유전자형 분석법(NFS-QI-DAM-03:2020)."
 
+KEYWORD_SUSPECT = ["피의자", "피혐의자", "용의자", "관계자", "참고인"]
+
+PHRASE_DBSEARCH_RESULT = {
+    "결과없음-피의자": "{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과 일치 건 없음.\r\n",
+    "결과없음-현장프로필": "{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과 일치 건(범죄 현장 등, 구속피의자 등 및 수형인 등) 없음.\r\n",
+    "과거건일치-피의자": "{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과, 다음 [표]의 사건에서 확보된 디엔에이형과 일치함.\r\n",
+    "과거건일치-현장프로필": "{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과, 다음 [표]의 사건에서 확보된 디엔에이형과 일치하고, 구속피의자 등 및 수형인 등과 일치 건 없음.\r\n",
+    "수형인일치": "{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과, 다음 [표]의 수형인 등의 디엔에이형과 일치함.\r\n",
+    "구속피의자일치" :"{nickname}의 디엔에이형을 현재까지 수록된 \"디엔에이신원확인정보 데이터베이스\"에서 검색한 결과, 구속피의자 식별코드 \"{code_arrestee}\"의 디엔에이형과 일치함.\r\n"
+}
+
+PHRASE_MATCH_PROB = "* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {base} x 10{power}임.\r\n"
 
 # Valid report type names (for validation)
 VALID_REPORT_TYPES = set(REPORT_TYPE_PHRASERS.keys())
