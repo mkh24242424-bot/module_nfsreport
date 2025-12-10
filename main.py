@@ -88,22 +88,38 @@ RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr, type_
 
 logger.info("한글 포맷터 객체 생성")
 path_base = os.path.dirname(os.path.abspath(__file__))
-hwp_formatter = NFS_HWP.NFS_HWPFormatter(type_report="DEFAULT", path_base=path_base, code_case=info.id_case)
+hwp_formatter = NFS_HWP.NFS_HWPFormatter(path_base=path_base)
+
+logger.info("새 감정서 생성")
+hwp_formatter.create_new_report(code_case=info.id_case, type_report="DEFAULT")
 
 logger.info("사건 기본 정보 입력")
-hwp_formatter.fill_field_caseinfo(info.caseinfo)
+for field in info.caseinfo:
+    hwp_formatter.fill_fieldtext(field_name=field, text=info.caseinfo[field])
 
 logger.info("감정물명 입력")
 evidence_text = RW.make_contents_evidence()
-hwp_formatter.fill_field_evidence(evidence_text)
+hwp_formatter.fill_fieldtext(field_name="감정물", text=evidence_text)
 
 logger.info("실험방법 입력")
 experiment_method = RW.make_contents_experiment_methods()
-hwp_formatter.fill_field_experiment_method(experiment_method)
+hwp_formatter.fill_fieldtext(field_name="실험방법", text=experiment_method)
 
 logger.info("감정결과 입력")
 phrase_result = RW.make_contents_result()
-hwp_formatter.fill_field_result(phrase_result)
+hwp_formatter.fill_fieldtext(field_name="실험결과", text=phrase_result)
+
+logger.info("기타 내용 입력")
+phrase_remark = RW.make_contents_remarks(phrase_result=phrase_result)
+hwp_formatter.fill_fieldtext(field_name="기타", text=phrase_remark)
+
+logger.info("도장 입력")
+sealinfo = [
+    {"name": "문경환", "path_img": "/img/seal1.png"},
+    {"name": "문경환", "path_img": "/img/seal2.png"},
+    {"name": "문경환", "path_img": "/img/seal3.png"},
+]
+hwp_formatter.fill_seal(sealinfo=sealinfo)
 
 logger.info("========== 프로그램 종료 ==========")
 

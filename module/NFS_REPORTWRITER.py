@@ -5,7 +5,7 @@ from . import NFS_REPORTPHRASER as NFS_RP
 from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
-        REPORT_TYPE_PHRASERS
+        REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY
 from .NFS_BLOCKMANAGER import BlockProfileManager, BlockProfile
 import re
 logger = logging.getLogger(__name__) 
@@ -27,6 +27,7 @@ class NFSReportWriter:
         >>> writer = NFSReportWriter(info, ["/path/pic1.jpg"])
         >>> writer.make_contents_default()
     """
+    _SUPPORTED_KITS = ("STR", "YSTR")
 
     def __init__(
         self,
@@ -107,13 +108,13 @@ class NFSReportWriter:
                     f"{kit} ProfileDataManager가 None입니다 "
                     f"(id_ref={id_ref}): 기본값 사용"
                 )
-                return ("0", "0")
+                return DEFAULT_LR
         except Exception as e:
             logger.warning(
                 f"우도비 계산 실패 (kit={kit}, id_ref={id_ref}): {e}. "
                 f"기본값 사용"
             )
-            return ("0", "0")
+            return DEFAULT_LR
     
     def _extract_gender(self, id_ref: str, kit: Literal["STR", "YSTR"]) -> str:
         """주어진 프로필 ID에 대한 성별 추출
@@ -151,6 +152,15 @@ class NFSReportWriter:
                 f"기본값 사용"
             )
             return ""   
+
+    def _get_processed_evidence_num(self, df_subset) -> str:
+        """증거물번호 전처리"""
+        list_id = df_subset['감정물번호'].tolist()
+        text_num = self.blocks_manager['STR'].evidence_text_generator.create_text_evidence(list_id=list_id, kit="STR")
+        text_num = re.sub(r"\(상피세포층\)|\(정자층\)|[a-zA-Z]", "", text_num)
+        text_num = " 및 ".join(dict.fromkeys(text_num.split(" 및 ")))
+        text_num = ", ".join(dict.fromkeys(text_num.split(", ")))
+        return text_num
 
     def _make_contents_from_block(
         self,
@@ -220,24 +230,18 @@ class NFSReportWriter:
         Examples:
             >>> from module.constants_reportwriter import REPORT_TYPE_PHRASERS
             >>> RW = NFSReportWriter(info, [])
-            >>> RW.make_contents_result(REPORT_TYPE_PHRASERS["suspect"])
+            >>> RW._make_contents_experiment_result(REPORT_TYPE_PHRASERS["suspect"])
         """
-        logger.debug(f"make_contents_result 시작 (phraser 타입 수={len(phrasers)})")
+        logger.debug(f"_make_contents_experiment_result 시작 (phraser 타입 수={len(phrasers)})")
         phrases_result = []
 
-        # 1. 검증: 필수 kit이 모두 있는지 확인
-        required_kits = ("STR", "YSTR")
-        for kit in required_kits:
-            if kit not in phrasers:
-                raise ValueError(f"phrasers에 '{kit}' kit이 누락되었습니다.")
-
-        # 2. STR 및 YSTR 키트 처리
-        for kit in required_kits:
+        # 1. STR 및 YSTR 키트 처리
+        for kit in self._SUPPORTED_KITS:
             logger.debug(f"{kit} 블록 처리 시작")
             block_manager = self.blocks_manager[kit]
             kit_phrasers = phrasers[kit]
 
-            # 3. 각 블록 유형별 처리
+            # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
                 # 블록이 존재하지 않으면 스킵
                 if block_type not in block_manager.blocks:
@@ -267,7 +271,76 @@ class NFSReportWriter:
             logger.debug(f"{kit} 블록 처리 완료")
         
         return phrases_result
+
+    def _make_contents_dbsearch_results(self) -> str:
+        """DB 검색 결과를 감정서에 바로 쓸 수 있는 형태로 편집"""
+        df_search = self.report_data.evidenceinfo[
+            self.report_data.evidenceinfo["검색_결과"] != "검색 안함"
+        ]
+        
+        phrases = []  # 버그 수정: 덮어쓰기 -> 리스트 수집
+        
+        for _, result in df_search.iterrows():
+            nickname = result["대조_이름"]
+            evidence_id = result["감정물번호"]
+            search_result = result["검색_결과"]
+            is_suspect = any(keyword in nickname for keyword in KEYWORD_SUSPECT)
+            
+            if search_result == "결과 없음":
+                key = "결과없음-피의자" if is_suspect else "결과없음-현장프로필"
+                phrases.append(PHRASE_DBSEARCH_RESULT[key].format(nickname=nickname))
+                
+            elif search_result == "과거건 일치":
+                key = "과거건일치-피의자" if is_suspect else "과거건일치-현장프로필"
+                phrase = PHRASE_DBSEARCH_RESULT[key].format(nickname=nickname)
+                if is_suspect:
+                    base, power = self._calculate_likelihood_ratio(evidence_id, kit="STR")
+                    phrase += PHRASE_MATCH_PROB.format(base=base, power=power)
+                phrases.append(phrase)
+                
+            elif search_result == "수형인 일치":
+                phrases.append(PHRASE_DBSEARCH_RESULT["수형인일치"].format(nickname=nickname))
+                
+            elif search_result == "구속피의자 일치":
+                code_arrestee = result["comment"]
+                phrase = PHRASE_DBSEARCH_RESULT["구속피의자일치"].format(
+                    nickname=nickname, code_arrestee=code_arrestee
+                )
+                base, power = self._calculate_likelihood_ratio(evidence_id, kit="STR")
+                phrase += PHRASE_MATCH_PROB.format(base=base, power=power)
+                phrases.append(phrase)
+        
+        return "\n".join(phrases)  # 또는 기존 반환 형식에 맞게
     
+    def make_contents_result(self) -> str:
+        """감정 결과 문구를 감정서에 바로 쓸 수 있는 형태로 편집"""
+        logger.info("감정 결과 문구 생성 시작")
+
+        # 1. Phraser 매핑 로드
+        if self.type_report not in REPORT_TYPE_PHRASERS:
+            raise ValueError(f"유효하지 않은 감정서 유형: {self.type_report}")
+        
+        phrasers = REPORT_TYPE_PHRASERS[self.type_report]
+
+        # 2. 감정 결과 문구 생성
+        phrases_result = self._make_contents_experiment_result(phrasers)
+
+        # 3. DB 검색 결과 추가
+        phrase_dbsearch = self._make_contents_dbsearch_results()
+        if phrase_dbsearch:
+            phrases_result.append(phrase_dbsearch)
+
+        # 4. 최종 문구 결합
+        numbered_phrases = [
+            f"{idx}) {phrase}" 
+            for idx, phrase in enumerate(phrases_result, start=1)
+        ]
+        next_number = len(phrases_result) + 1
+        phrase_final = "\n".join(numbered_phrases) + f"\n{next_number}) "  
+
+        logger.info("감정 결과 문구 생성 완료")
+        return phrase_final
+
     def make_contents_evidence(self) -> str:
         """증거물명 리스트를 감정서에 바로 쓸 수 있는 형태로 편집"""
         
@@ -323,73 +396,86 @@ class NFSReportWriter:
         else:
             return PHRASE_EXPERIMENT_METHOD_YSTR
 
-    def _make_contents_dbsearch_results(self) -> str:
-        """DB 검색 결과를 감정서에 바로 쓸 수 있는 형태로 편집"""
-        df_search = self.report_data.evidenceinfo[self.report_data.evidenceinfo["검색_결과"] != "검색 안함"]
-        phrase_search = ""
-        for idx, result in df_search.iterrows():
-            nickname = result["대조_이름"]
-            id = result["감정물번호"]
-            is_suspect = any(keyword in nickname for keyword in KEYWORD_SUSPECT)
-            if result["검색_결과"] == "결과 없음":
-                if is_suspect:
-                    phrase_search = PHRASE_DBSEARCH_RESULT['결과없음-피의자'].format(nickname=nickname)
-                else:
-                    phrase_search = PHRASE_DBSEARCH_RESULT['결과없음-현장프로필'].format(nickname=nickname)
-            elif result["검색_결과"] == "과거건 일치": 
-                if is_suspect:
-                    phrase_search = PHRASE_DBSEARCH_RESULT['과거건일치-피의자'].format(nickname=nickname)
-                    base, power = self._calculate_likelihood_ratio(id, kit="STR")
-                    phrase_search += PHRASE_MATCH_PROB.format(base=base, power=power)
-                else:
-                    phrase_search = PHRASE_DBSEARCH_RESULT['과거건일치-현장프로필'].format(nickname=nickname)
-            elif result["검색_결과"] == "수형인 일치":
-                phrase_search = PHRASE_DBSEARCH_RESULT['수형인일치'].format(nickname=nickname)
-            elif result["검색_결과"] == "구속피의자 일치":
-                code_arrestee = result["comment"] # DB결과 정리시 comment 컬럼에 구속피의자 식별코드 저장
-                phrase_search = PHRASE_DBSEARCH_RESULT['구속피의자일치'].format(nickname=nickname, code_arrestee=code_arrestee)
-                base, power = self._calculate_likelihood_ratio(id, kit="STR")
-                phrase_search += PHRASE_MATCH_PROB.format(base=base, power=power)
-        return phrase_search
-    
-            # 우도비 계산
-            # DB 저장, 보존 유무는 이 후에 따로 처리 고려.
-            # 예외 처리 필요: 피의자 일치의 경우
-                
-    
+    def _make_contents_return(self) -> str:
+        """반환 문구 정리"""
+        phrase_return = []
+        df_written = self.report_data.evidenceinfo[self.report_data.evidenceinfo["기재_여부"] == "기재"]
+        total_count = len(df_written)
         
-        pass
-
-    def make_contents_result(self) -> str:
-        """감정 결과 문구를 감정서에 바로 쓸 수 있는 형태로 편집"""
-        logger.info("감정 결과 문구 생성 시작")
-
-        # 1. Phraser 매핑 로드
-        if self.type_report not in REPORT_TYPE_PHRASERS:
-            raise ValueError(f"유효하지 않은 감정서 유형: {self.type_report}")
+        # 상태별 DataFrame 생성
+        status_dfs = {
+            status.key: df_written[df_written["반환_여부"] == status.key]
+            for status in RETURN_STATUSES
+        }
         
-        phrasers = REPORT_TYPE_PHRASERS[self.type_report]
+        # 단일 상태 체크
+        for status in RETURN_STATUSES:
+            if len(status_dfs[status.key]) == total_count:
+                return status.single_phrase
+        
+        # 혼합 상태 처리 (process_order 순으로 정렬)
+        parts = []
+        sorted_statuses = sorted(RETURN_STATUSES, key=lambda x: x.process_order)
+        
+        for status in sorted_statuses:
+            df_subset = status_dfs[status.key]
+            if not df_subset.empty:
+                if status.needs_evidence_num:
+                    linked_num = self._get_processed_evidence_num(df_subset)
+                    parts.append(status.mixed_phrase.format(linked_num))
+                else:
+                    parts.append(status.mixed_phrase)
+        
+        phrase_return = ", ".join(parts) + ".\r\n"
+        return phrase_return
 
-        # 2. 감정 결과 문구 생성
-        phrases_result = self._make_contents_experiment_result(phrasers)
+    def _make_contents_etc(self, text: str) -> list[str]:
+        """비고 문구 정리"""
+        phrases_etc = []
+        for cond in ETC_CONDITIONS:
+            if cond.condition(text):
+                phrases_etc.append(cond.phrase)
+        return phrases_etc
 
-        # 3. DB 검색 결과 추가
-        phrase_dbsearch = self._make_contents_dbsearch_results()
-        if phrase_dbsearch:
-            phrases_result.append(phrase_dbsearch)
+    def _make_contents_empty_evidence(self) -> str:
+        """감정물 없음 문구 생성"""
+        df_empty = self.report_data.evidenceinfo[self.report_data.evidenceinfo["기재_여부"] == "내용물 없음"]
+        if not df_empty.empty:
+            text_num = self._get_processed_evidence_num(df_empty)
+            phrase_empty = PHRASE_EMPTY.format(text_num=text_num)
+            return phrase_empty
+        return ""
+    
+    def make_contents_remarks(self, phrase_result) -> str:
+        """비고 문구를 감정서에 바로 쓸 수 있는 형태로 편집"""
+        logger.info("비고 문구 생성 시작")
+        
+        # 1. 비고 문구 수집
+        phrases_etc = []
+        
+        # 1-1. 기타 조건 문구
+        phrases_etc.extend(self._make_contents_etc(phrase_result))
+        
+        # 1-2. 내용물 없음 문구
+        phrase_empty = self._make_contents_empty_evidence()
+        if phrase_empty:
+            phrases_etc.append(phrase_empty)
+        
+        # 1-3. 반환 문구
+        phrase_return = self._make_contents_return()
+        phrases_etc.append(phrase_return)
 
-        # 4. 최종 문구 결합
+        # 2. 최종 비고 문구 결합
         phrase_final = ""
-        for idx, phrase in enumerate(phrases_result, start=1):
-            phrase_final = phrase_final + f"{idx}) {phrase}\n"
-        phrase_final = phrase_final + f"{idx+1}) "    
-
-        logger.info("감정 결과 문구 생성 완료")
+        if len(phrases_etc) == 1:
+            phrase_final = phrases_etc[0]
+        else:
+            numbered_phrases = [
+                f"{idx}) {phrase}" 
+                for idx, phrase in enumerate(phrases_etc, start=1)
+            ]
+            phrase_final = "\n".join(numbered_phrases) 
         return phrase_final
-        
-
-
-
             
             
 

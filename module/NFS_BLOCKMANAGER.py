@@ -434,7 +434,44 @@ class BlockProfileManager:
             # 해당 유형의 프로필이 없는 경우
             logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
             return []
-            
+    
+    def _generate_blocks_special(self, column, value) -> list[BlockProfile]:
+        """특수 블록 생성 (예: LC, NX)
+
+        지정된 컬럼에서 특정 값을 가진 증거물들의 블록을 생성합니다.
+        예: LC (Low Concentration), NX (Not eXamined) 등
+
+        Args:
+            column: 필터링할 컬럼명
+            value: 필터링할 값
+
+        Returns:
+            list[BlockProfile]: 생성된 블록 리스트.
+                해당 조건에 맞는 증거물이 없으면 빈 리스트
+
+        Examples:
+            >>> manager = BlockProfileManager(info_written, kit="STR")
+            >>> blocks = manager._generate_blocks_special("특수_상태", "LC")
+            >>> len(blocks)
+        """
+        logger.debug(f"특수 블록 생성 시작 (column={column}, value={value})")
+
+        # 1. 특수 조건에 맞는 증거물 필터링
+        info_special = self.info_indexed.reset_index()
+        info_special = info_special[info_special[column] == value]
+
+        if len(info_special) == 0:
+            logger.info(f"특수 조건에 맞는 증거물이 없습니다 (column={column}, value={value})")
+            return []
+
+        # 2. 블록 생성
+        block = self._generate_block(
+            info=info_special,
+            id_ref=value
+        )
+
+        logger.debug(f"특수 블록 생성 완료 (증거물 수={len(info_special)})")
+        return [block]    
             
        
 class EvidenceTextGenerator:

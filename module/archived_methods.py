@@ -320,97 +320,118 @@ print("프로필:", profile_dict)
 print("특이사항:", notes)
 """
 
+def make_contents_common_etc(self) -> None:
+    """공통으로 쓰이는 기타 사항 문구 생성.
+    반환, 비고사항, 감정물 없음 처리"""
 
-    def make_contents_common_result(self) -> None:
-        """공통으로 쓰이는 결과 문구를 정리하는 메소드.
-        검색결과, 실험 안함 정리.
-        """
+    def make_contents_return() -> None:
+        """반환 문구 정리"""
 
-        def make_contents_search() -> None:
-            """검색결과 정리"""
-            df_search = self.df_report[self.df_report["검색_결과"] != "검색 안함"]
-            phrase_result = ""
-            for idx, result in df_search.iterrows():
-                if result["검색_결과"] == "결과 없음":
-                    list_suspect = ["피의자", "피혐의자", "용의자", "관계자", "참고인"]
-                    if any(suspect in result["대조_이름"] for suspect in list_suspect):
-                        phrase_result = (
-                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과 일치 건 없음.\r\n"
-                        )
-                    else:
-                        phrase_result = (
-                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과 "
-                            f"일치 건(범죄 현장 등, 구속피의자 등 및 수형인 등) 없음.\r\n"
-                        )
-                    if result["프로필_유형"] == "대표":
-                        self.dict_flags_etc["db_store"] = True
-                elif result["검색_결과"] == "과거건 일치":
-                    if (
-                        self.type_report == "피의자 대조-일치"
-                    ):  # 피의자 대조 시 첫문장에 대조 요청 건에 대한 결과를 쓰기 때문에 특수 처리.
-                        phrase_result = (
-                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
-                            f"연관건 외 일치 건 없음.\r\n "
-                        )
-                    else:
-                        phrase_result = (
-                            f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                            f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
-                            f"다음 [표]의 사건에서 확보된 디엔에이형과 일치하고, "
-                            f"구속피의자 등 및 수형인 등과 일치 건 없음.\r\n "
-                        )
-                    if result["프로필_유형"] == "대표":
-                        self.dict_flags_etc["db_store"] = True
-                    elif result["프로필_유형"] == "대조":
-                        self.dict_flags_etc["db_deletion"] = True
-                elif result["검색_결과"] == "수형인 일치":
-                    phrase_result = (
-                        f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                        f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, 수형인 등과 일치 건 있음.\r\n"
-                    )
-                    self.dict_flags_etc["db_deletion"] = True
-                    self.dict_flags_etc["db_prosecution"] = True
-                elif result["검색_결과"] == "구속피의자 일치":
-                    code_arrestee, ok = QInputDialog.getText(
-                        None,
-                        "구속피의자 식별코드",
-                        "구속피의자 식별코드를 입력하세요. (e.g. 201406P00163A)",
-                    )
-                    if not ok:
-                        code_arrestee = "xxxxxxxx"
-                    phrase_result = (
-                        f"{result['대조_이름']}의 디엔에이형을 현재까지 수록된 "
-                        f"“디엔에이신원확인정보 데이터베이스”에서 검색한 결과, "
-                        f"구속피의자 식별코드 “{code_arrestee}”의 디엔에이형과 일치함.\r\n"
-                    )
-                    if self.type_report != "부검":
-                        lh = self.NPDM_STR.calculate_likelihood_from_profile(
-                            result["감정물번호"]
-                        )
-                        phrase_result = (
-                            phrase_result
-                            + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {lh[0]} x 10{lh[1]}임.\r\n"
-                        )
-                        self.dict_flags_etc["db_deletion"] = True
-                        self.dict_flags_etc["mp"] = True
-                if phrase_result != "":
-                    self.phrases_result.append(phrase_result)
+        def preprocess_phrase_return(linked_num: str) -> str:
+            linked_num_return = re.sub(
+                r"\(상피세포층\)|\(정자층\)|[a-zA-Z]", "", linked_num
+            )  # 증거물번호 내 알파벳 제거
+            linked_num_return = " 및 ".join(
+                list(dict.fromkeys(linked_num_return.split(" 및 ")))
+            )  # 증거물 번호 내 중복 제거
+            linked_num_return = ", ".join(
+                list(dict.fromkeys(linked_num_return.split(", ")))
+            )  # 증거물 번호 내 중복 제거
+            return linked_num_return
 
-        def make_contents_noexperiment() -> None:
-            """실험 안함 정리."""
-            df_noexp = self.df_report[self.df_report["기재_여부"] == "실험 안함"]
-            if df_noexp.shape[0]:
-                linked_num_noexp = self.chain_num_evidence(
-                    list_samplenames=list(df_noexp["감정물번호"]),
-                    y23=False,
-                    reaction=True,
+        df_written = self.df_report[self.df_report["기재_여부"] == "기재"]
+        df_return = df_written[df_written["반환_여부"] == "반환"]
+        df_used = df_written[df_written["반환_여부"] == "전량 소모"]
+        df_toxicology = df_written[df_written["반환_여부"] == "독성"]
+        df_discard = df_written[df_written["반환_여부"] == "폐기"]
+        phrase_return = ""
+        if df_used.shape[0] == df_written.shape[0]:
+            phrase_return = "감정물은 전량 소모하였음.\r\n"
+        elif df_return.shape[0] == df_written.shape[0]:
+            phrase_return = "감정물은 반환함.\r\n"
+        elif df_toxicology.shape[0] == df_written.shape[0]:
+            phrase_return = (
+                "감정물은 대전과학수사연구소 독성화학과로 반환하였음.\r\n"
+            )
+        elif df_discard.shape[0] == df_written.shape[0]:
+            phrase_return = "감정물은 감정서 발송일로부터 14일 이내에 `반환` 요구가 없을시 폐기처분하겠음.\r\n"
+        else:
+            if df_return.shape[0] != 0:
+                linked_num_return = preprocess_phrase_return(
+                    self.chain_num_evidence(
+                        list_samplenames=list(df_return["감정물번호"]),
+                        y23=False,
+                        reaction=False,
+                    )
                 )
-                phrase_noexp = f"{linked_num_noexp}는 실험하지 않음.\r\n"
-                self.phrases_result.append(phrase_noexp)
+                phrase_return = (
+                    phrase_return + f"{linked_num_return} 감정물은 반환하고, "
+                )
+            if df_toxicology.shape[0] != 0:
+                linked_num_return = preprocess_phrase_return(
+                    self.chain_num_evidence(
+                        list_samplenames=list(df_toxicology["감정물번호"]),
+                        y23=False,
+                        reaction=False,
+                    )
+                )
+                phrase_return = (
+                    phrase_return
+                    + f"{linked_num_return} 감정물은 대전과학수사연구소 독성화학과로 반환했고, "
+                )
+            if df_discard.shape[0] != 0:
+                linked_num_return = preprocess_phrase_return(
+                    self.chain_num_evidence(
+                        list_samplenames=list(df_discard["감정물번호"]),
+                        y23=False,
+                        reaction=False,
+                    )
+                )
+                phrase_return = (
+                    phrase_return
+                    + f"{linked_num_return} 감정물은 감정서 발송일로부터 14일 이내에 `반환` 요구가 없을시 폐기처분하고, "
+                )
+            phrase_return = phrase_return + "나머지 감정물은 전량 소모하였음.\r\n"
+        self.phrases_etc.append(phrase_return)
 
-        make_contents_search()
-        make_contents_noexperiment()
+    def make_contents_etc_flag() -> None:
+        """비고 문구 정리"""
+        if self.dict_flags_etc["db_prosecution"]:
+            self.phrases_etc.append(
+                "수형인 등과 일치건에 대한 검색결과는 대검찰청에서 별도 회보함.\r\n"
+            )
+        if self.dict_flags_etc["db_store"]:
+            self.phrases_etc.append(
+                "「디엔에이신원확인정보의 이용 및 보호에 관한 법률」에 따라, "
+                "본 건에서 확보된 디엔에이형을 “디엔에이신원확인정보 데이터베이스”에 수록하여 관리하겠음.\r\n"
+            )
+        if self.dict_flags_etc["db_deletion"]:
+            self.phrases_etc.append(
+                "「디엔에이신원확인정보의 이용 및 보호에 관한 법률」에 따라, "
+                "신원이 확인된 본 건 관련 범죄현장 증거물의 디엔에이형은 데이터베이스에서 삭제하겠음.\r\n"
+            )
+        if self.dict_flags_etc["mp"]:
+            self.phrases_etc.append(
+                "개인식별지수란 감정물의 디엔에이가 동일인으로부터 유래되어서 "
+                "디엔에이형이 일치할 확률 대 다른 사람으로부터 유래되었으나 우연히 디엔에이형이 일치할 확률의 비임.\r\n"
+            )
+        if self.dict_flags_etc["Y_match"]:
+            self.phrases_etc.append(
+                "Y-STR 디엔에이형이 일치할 경우, 동일부계 남성이 배제되지 않음.\r\n"
+            )
 
+    def make_contents_empty() -> None:
+        """감정물 없음 정리"""
+        df_empty = self.df_report[self.df_report["기재_여부"] == "내용물 없음"]
+        if df_empty.shape[0]:
+            linked_num_empty = self.chain_num_evidence(
+                list_samplenames=list(df_empty["감정물번호"]),
+                y23=False,
+                reaction=False,
+            )
+            phrase_empty = f"{linked_num_empty}은 내용물 없음\r\n"
+            self.phrases_etc.append(phrase_empty)
+
+    make_contents_etc_flag()
+    make_contents_empty()
+    make_contents_return()

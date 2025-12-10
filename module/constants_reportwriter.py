@@ -7,9 +7,13 @@ across STR and YSTR kits.
 
 from typing import Dict, Callable
 import module.NFS_REPORTPHRASER as NFS_RP
+from dataclasses import dataclass
+from typing import Callable
 
 # Type alias for phraser mapping
 PhraserMapping = Dict[str, Dict[str, Callable]]
+
+DEFAULT_LR: tuple[str, str] = ("0", "0")
 
 REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
     "default": {
@@ -57,6 +61,97 @@ PHRASE_DBSEARCH_RESULT = {
 }
 
 PHRASE_MATCH_PROB = "* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {base} x 10{power}임.\r\n"
+
+# 반환 처리용 데이터 클래스
+@dataclass(frozen=True)
+class ReturnStatus:
+    """반환 상태 정의"""
+    key: str                    # DataFrame 필터링 키
+    single_phrase: str          # 단일 상태일 때 문구
+    mixed_phrase: str           # 혼합 상태일 때 문구
+    needs_evidence_num: bool    # 증거물 번호 필요 여부
+    process_order: int          # 혼합 시 처리 순서 (낮을수록 먼저)
+
+RETURN_STATUSES = [
+        ReturnStatus(
+            key="반환",
+            single_phrase="감정물은 반환함.\r\n",
+            mixed_phrase="{} 감정물은 반환하고",
+            needs_evidence_num=True,
+            process_order=1,
+        ),
+        ReturnStatus(
+            key="독성",
+            single_phrase="감정물은 대전과학수사연구소 독성화학과로 반환하였음.\r\n",
+            mixed_phrase="{} 감정물은 대전과학수사연구소 독성화학과로 반환했고",
+            needs_evidence_num=True,
+            process_order=2,
+        ),
+        ReturnStatus(
+            key="폐기",
+            single_phrase="감정물은 감정서 발송일로부터 14일 이내에 `반환` 요구가 없을시 폐기처분하겠음.\r\n",
+            mixed_phrase="{} 감정물은 감정서 발송일로부터 14일 이내에 `반환` 요구가 없을시 폐기처분하고",
+            needs_evidence_num=True,
+            process_order=3,
+        ),
+        ReturnStatus(
+            key="전량 소모",
+            single_phrase="감정물은 전량 소모하였음.\r\n",
+            mixed_phrase="나머지 감정물은 전량 소모하였음",
+            needs_evidence_num=False,
+            process_order=99,  # 항상 마지막
+        ),
+    ]
+
+# 결과 내용에 따른 비고 문구 생성용 데이터클래스
+@dataclass
+class EtcCondition:
+    key: str
+    phrase: str
+    condition: Callable[[str], bool]
+
+
+ETC_CONDITIONS: list[EtcCondition] = [
+    EtcCondition(
+        key="수형인일치",
+        phrase="수형인 등과 일치건에 대한 검색결과는 대검찰청에서 별도 회보함.\r\n",
+        condition=lambda text: "수형인 등과 일치 건" in text
+    ),
+    EtcCondition(
+        key="DB저장",
+        phrase=(
+            "「디엔에이신원확인정보의 이용 및 보호에 관한 법률」에 따라, "
+            "본 건에서 확보된 디엔에이형을 \"디엔에이신원확인정보 데이터베이스\"에 수록하여 관리하겠음.\r\n"
+        ),
+        condition=lambda text: "일치 건(범죄 현장 등, 구속피의자 등 및 수형인 등)" in text \
+                                or "다음 [표]의 사건에서 확보된 디엔에이형과 일치하고, 구속피의자 등 및 수형인 등과 일치 건 없음." in text 
+    ),
+    EtcCondition(
+        key="DB삭제",
+        phrase=(
+            "「디엔에이신원확인정보의 이용 및 보호에 관한 법률」에 따라, "
+            "신원이 확인된 본 건 관련 범죄현장 증거물의 디엔에이형은 데이터베이스에서 삭제하겠음.\r\n"
+        ),
+        condition=lambda text: "수형인 등과 일치 건" in text \
+                                or "구속피의자 식별코드" in text \
+                                or "다음 [표]의 사건에서 확보된 디엔에이형과 일치함." in text
+    ),
+    EtcCondition(
+        key="개인식별지수",
+        phrase=(
+            "개인식별지수란 감정물의 디엔에이가 동일인으로부터 유래되어서 "
+            "디엔에이형이 일치할 확률 대 다른 사람으로부터 유래되었으나 우연히 디엔에이형이 일치할 확률의 비임.\r\n"
+        ),
+        condition=lambda text: "개인식별지수" in text
+    ),
+    EtcCondition(
+        key="YSTR일치",
+        phrase="Y-STR 디엔에이형이 일치할 경우, 동일부계 남성이 배제되지 않음.\r\n",
+        condition=lambda text: "Y-STR 디엔에이형과 일치함" in text
+    ),
+]
+
+PHRASE_EMPTY = "{text_num}은 내용물 없음\r\n"
 
 # Valid report type names (for validation)
 VALID_REPORT_TYPES = set(REPORT_TYPE_PHRASERS.keys())
