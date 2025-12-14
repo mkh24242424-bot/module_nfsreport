@@ -72,6 +72,27 @@ def input_comparison_case() -> tuple[str | Any, str | Any, Any] | tuple[str | An
             return "*** SCAS***-***호", "2024. *. *.", "2024-C-****"
 
 
+def make_pharase_differential_extraction(text_evidence: str, phrase_nonsperm:str, phrase_sperm:str) -> str:
+    reaction = re.search(r'\((.*?)\)', text_evidence)
+    text_evidence = re.sub(r'\([^)]*\)', '', text_evidence)
+    if reaction:
+        phrase_pair = f"{text_evidence}은 {reaction.group(1)}이고,"
+    else:
+        phrase_pair = f"{text_evidence}은, " 
+    phrase_nonsperm = re.sub(r'\([^)]*\)', '', phrase_nonsperm)
+    phrase_nonsperm = re.sub(r'증\([^)]+\)호', '상피세포층', phrase_nonsperm)
+    phrase_sperm = re.sub(r'\([^)]*\)', '', phrase_sperm)
+    phrase_sperm = re.sub(r'증\([^)]+\)호', '정자층', phrase_sperm)
+    phrase = f"{phrase_pair}\r\n-{phrase_nonsperm}\r\n-{phrase_sperm}"
+    return phrase
+
+def make_pharase_presume(text_evidence: str, phrase_detected:str, phrase_presumed:str) -> str:
+    text_evidence = re.sub(r'\([^)]*\)', '', text_evidence)
+    phrase_detected = phrase_detected.split("에서 ")[1].replace("됨.", "되고, ")
+    phrase_presumed = phrase_presumed.split("에서 ")[1].replace("이 검출됨.", "을 추정할 수 있음.") 
+    phrase = f"{text_evidence}에서 {phrase_detected}{phrase_presumed}"
+    return phrase
+
 def make_phrase_ref(info: Properties_Phrase) -> str:
     logger.debug(f"대조 문구 생성 시작 (nickname={info.nickname})")
     answer_victim = None

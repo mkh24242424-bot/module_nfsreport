@@ -1,42 +1,71 @@
 import logging
-from typing import Literal
-
+from typing import Literal, Iterator
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from module.contants_blockmanager import COLNAME_PER_KIT, KEYWORDS_PAIREDPROFILE, PAIR_TEXTEVIDENCE
 import pandas as pd
+import re
+from collections import defaultdict
 
 logger = logging.getLogger(__name__) 
 
-COLNAME_PER_KIT = {
-    "STR" : {
-        "NICKNAME": "대조_이름",
-        "REPORTED": "기재_여부",
-        "TEXT_EVIDENCE": "표기번호",
-        "CODE" : "코드",
-        "TYPE" : "프로필_유형"
-    },
-    "YSTR" : {
-        "NICKNAME": "Y_대조_이름",
-        "REPORTED": "Y_기재_여부",
-        "TEXT_EVIDENCE": "Y_표기번호",
-        "CODE" : "Y_코드",
-        "TYPE" : "Y_프로필_유형"
-    }
-}
 
-@dataclass
-class BlockProfile:
-    idx_first: str
-    nickname: str
-    text_table: str
-    text_phrase: str
-    id_ref: str
+
+class ProfileBlock(ABC):
+    """블록 공통 인터페이스"""
+    indexes: list
+    type_block: str
+    text_evidencenumber: str
+    @abstractmethod
+    def get_singles(self) -> Iterator['SingleProfileBlock']:
+        ...
+
+
+class SingleProfileBlock(ProfileBlock):
+    """단일 블록"""
+    def __init__(self, indexes: list, type_block: str,nickname: str, id_ref: str):
+        self.indexes = indexes
+        self.type_block = type_block
+        self.nickname = nickname
+        self.id_ref = id_ref
+    
+    def get_singles(self) -> Iterator['SingleProfileBlock']:
+        yield self
+
+
+class PairedProfileBlock(ProfileBlock):
+    """순서 있는 두 SingleBlock의 쌍"""
+    def __init__(self, first: SingleProfileBlock, second: SingleProfileBlock, type_block:str):
+        self.first = first
+        self.second = second
+        type_block = type_block
+    @property
+    def indexes(self) -> list:
+        return self.first.indexes
+    
+    @property
+    def text_evidencenumber(self) -> str:
+        return self.first.text_evidencenumber
+    
+    def get_singles(self) -> Iterator[SingleProfileBlock]:
+        yield self.first
+        yield self.second
+
+
+# @dataclass
+# class BlockProfile:
+#     idx_first: str
+#     nickname: str
+#     text_table: str
+#     text_phrase: str
+#     id_ref: str
 
 
 class BlockProfileManager:
     """블록 프로필 관리 클래스
 
     증거물 정보를 프로필 유형별로 그룹화하고,
-    각 유형에 맞는 BlockProfile 객체를 생성합니다.
+    각 유형에 맞는 ProfileBlock 객체를 생성합니다.
 
     주요 기능:
     - 프로필 유형별 코드 그룹화 (대조, 대조일치, 대표일치, ND, NC)
@@ -60,7 +89,6 @@ class BlockProfileManager:
         >>> manager = BlockProfileManager(info, kit="STR")
         >>> manager.generate_blocks()
         >>> len(manager.blocks['대조'])
-        2
 
     See Also:
         EvidenceTextGenerator: 증거물 텍스트 생성을 담당하는 헬퍼 클래스
@@ -85,6 +113,7 @@ class BlockProfileManager:
             >>> manager = BlockProfileManager(info_written=info_written, kit="STR")
             >>> manager.generate_blocks()
         """
+        self.info_written = info_written
         logger.debug(f"BlockProfileManager 초기화 시작 (kit={kit}, 증거물 수={len(info_written)})")
 
         # 1. 입력 검증
@@ -125,16 +154,15 @@ class BlockProfileManager:
         )
 
         # 5. 블록 저장소 및 텍스트 생성기 초기화
-        self.blocks = {}
+        self.blocks:list[SingleProfileBlock] = []
         self.evidence_text_generator = EvidenceTextGenerator(info_written.copy())
-
+        self.generate_blocks()
         logger.debug("BlockProfileManager 초기화 완료")
     
     @property
     def number_of_blocks(self) -> int:
         """생성된 블록의 총 개수 반환"""
-        total_blocks = sum(len(blocks) for blocks in self.blocks.values())
-        return total_blocks
+        return len(self.blocks)
 
     def generate_blocks(self):
         """모든 블록 유형 생성
@@ -151,7 +179,6 @@ class BlockProfileManager:
             >>> manager = BlockProfileManager(info_written, kit="STR")
             >>> manager.generate_blocks()
             >>> len(manager.blocks['대조'])
-            2
 
         See Also:
             _generate_blocks_ref: 대조 블록 생성
@@ -161,43 +188,46 @@ class BlockProfileManager:
         logger.debug("블록 생성 시작")
 
         # 1. 블록 저장소 초기화
-        self.blocks = {
-            '대조': [],
-            '대조일치': [],
-            '대표일치': [],
-            'ND': [],
-            'NC': [] # 추후에 필요시 블록 종류 추가 가능, 예) LC = 정량 결과 농도 낮아 실험하지 않음, NX: 특정 이유로 실험하지 않음.
-        }
+        # self.blocks = {
+        #     '대조': [],
+        #     '대조일치': [],
+        #     '대표일치': [],
+        #     'ND': [],
+        #     'NC': [] # 추후에 필요시 블록 종류 추가 가능, 예) LC = 정량 결과 농도 낮아 실험하지 않음, NX: 특정 이유로 실험하지 않음.
+        # }
+
+        self.blocks = []
 
         # 2. 각 유형별 블록 생성
-        self.blocks['대조'].extend(self._generate_blocks_ref())
-        logger.debug(f"대조 블록 생성 완료 (개수={len(self.blocks['대조'])})")
+        
+        self.blocks.extend(self._generate_blocks_ref())
+        logger.debug(f"대조 블록 생성 완료")
 
-        self.blocks['대조일치'].extend(self._generate_blocks_match(type_profile='대조'))
-        logger.debug(f"대조일치 블록 생성 완료 (개수={len(self.blocks['대조일치'])})")
+        self.blocks.extend(self._generate_blocks_match(type_profile='대조일치'))
+        logger.debug(f"대조일치 블록 생성 완료")
 
-        self.blocks['대표일치'].extend(self._generate_blocks_match(type_profile='대표'))
-        logger.debug(f"대표일치 블록 생성 완료 (개수={len(self.blocks['대표일치'])})")
+        self.blocks.extend(self._generate_blocks_match(type_profile='대표일치'))
+        logger.debug(f"대표일치 블록 생성 완료")
 
-        self.blocks['ND'].extend(self._generate_blocks_noprofile(type_profile='ND'))
-        logger.debug(f"ND 블록 생성 완료 (개수={len(self.blocks['ND'])})")
+        self.blocks.extend(self._generate_blocks_noprofile(type_profile='ND'))
+        logger.debug(f"ND 블록 생성 완료")
 
-        self.blocks['NC'].extend(self._generate_blocks_noprofile(type_profile='NC'))
-        logger.debug(f"NC 블록 생성 완료 (개수={len(self.blocks['NC'])})")
+        self.blocks.extend(self._generate_blocks_noprofile(type_profile='NC'))
+        logger.debug(f"NC 블록 생성 완료")
 
-        total_blocks = sum(len(blocks) for blocks in self.blocks.values())
+        total_blocks = self.number_of_blocks
         logger.debug(f"블록 생성 완료 (총 {total_blocks}개)")
 
     def _generate_block(
         self,
         info: pd.DataFrame,
         id_ref: str,
-        nickname_ref: str = ""
-    ) -> BlockProfile:
+        type_block: str,
+        nickname_ref: str = "",
+    ) -> SingleProfileBlock:
         """단일 블록 프로필 생성
 
-        증거물 정보 DataFrame으로부터 BlockProfile 객체를 생성합니다.
-        테이블용 텍스트와 구문용 텍스트(체액 반응 포함)를 각각 생성합니다.
+        증거물 정보 DataFrame으로부터 ProfileBlock 객체를 생성합니다.
 
         빈 DataFrame이 전달될 경우 빈 텍스트를 가진 블록을 생성합니다.
         (매치되는 일반 프로필이 없는 경우 발생 가능)
@@ -208,7 +238,7 @@ class BlockProfileManager:
             nickname_ref: 참조 닉네임. 기본값은 ""
 
         Returns:
-            BlockProfile: 생성된 블록 프로필 객체
+            ProfileBlock: 생성된 블록 프로필 객체
 
         Examples:
             >>> info = pd.DataFrame({
@@ -227,48 +257,22 @@ class BlockProfileManager:
         """
         logger.debug(f"블록 생성 시작 (id_ref={id_ref}, 증거물 수={len(info)})")
 
-        # 1. 빈 DataFrame 처리
-        if len(info) == 0:
-            logger.warning(f"빈 DataFrame으로 블록 생성 (id_ref={id_ref})")
-            # 빈 블록 생성 (텍스트는 빈 문자열)
-            block = BlockProfile(
-                idx_first="",
-                nickname=nickname_ref,
-                text_table="",
-                id_ref=id_ref,
-                text_phrase=""
-            )
-            logger.debug(f"빈 블록 생성 완료 (id_ref={id_ref})")
-            return block
+        # 1. 증거물 Index 추출
+        evidence_idx = list(info['index'])
+        logger.debug(f"증거물 index 추출 완료 (개수={len(evidence_idx)})")
 
-        # 2. 증거물 ID 추출
-        evidence_ids = list(info['감정물번호'])
-        logger.debug(f"증거물 ID 추출 완료 (개수={len(evidence_ids)})")
-
-        # 3. 증거물 텍스트 생성
-        text_table = self.evidence_text_generator.create_text_evidence(
-            list_id=evidence_ids,
-            kit=self.kit
-        )
-        text_phrase = self.evidence_text_generator.create_text_evidence(
-            list_id=evidence_ids,
-            kit=self.kit,
-            reaction=True
-        )
-
-        # 4. BlockProfile 객체 생성
-        block = BlockProfile(
-            idx_first=info.iloc[0]["index"],
+        # 3. BlockProfile 객체 생성
+        block = SingleProfileBlock(
+            indexes=evidence_idx,
             nickname=nickname_ref,
-            text_table=text_table,
+            type_block=type_block,
             id_ref=id_ref,
-            text_phrase=text_phrase
         )
 
-        logger.debug(f"블록 생성 완료 (idx_first={block.idx_first})")
+        logger.debug(f"블록 생성 완료 (idx_first={block.indexes[0]})")
         return block        
 
-    def _generate_blocks_ref(self) -> list[BlockProfile]:
+    def _generate_blocks_ref(self) -> list[SingleProfileBlock]:
         """대조 프로필 블록 생성
 
         '대조' 유형의 프로필에 대한 블록을 생성합니다.
@@ -309,7 +313,8 @@ class BlockProfileManager:
             block = self._generate_block(
                 info=info_ref,
                 id_ref=id_ref,
-                nickname_ref=nickname_ref
+                nickname_ref=nickname_ref,
+                type_block=type_profile
             )
             blocks.append(block)
             logger.debug(f"대조 블록 생성 (code={code}, id_ref={id_ref}, nickname={nickname_ref})")
@@ -319,8 +324,8 @@ class BlockProfileManager:
     
     def _generate_blocks_match(
         self,
-        type_profile: Literal["대표", "대조"]
-    ) -> list[BlockProfile]:
+        type_profile: Literal["대표일치", "대조일치"]
+    ) -> list[SingleProfileBlock]:
         """일치 블록 생성 (대조일치 또는 대표일치)
 
         지정된 프로필 유형(대조/대표)과 일치하는 일반 프로필들의 블록을 생성합니다.
@@ -374,15 +379,19 @@ class BlockProfileManager:
                 logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code})")
 
             # 2-3. 대표일치의 경우 대표 프로필 자체도 포함
-            if type_profile == "대표":
+            if type_profile == "대표일치":
                 info_match = pd.concat([info_ref, info_match]).sort_values(by='index')
                 logger.debug(f"대표 프로필 포함 (총 행 수={len(info_match)})")
-
+            
             # 2-4. 블록 생성
+            if len(info_match) == 0:
+                logger.info(f"{type_profile}일치 프로필이 없어 블록 생성하지 않음 (code={code})")
+                continue
             block = self._generate_block(
                 info=info_match,
                 id_ref=id_ref,
-                nickname_ref=nickname_ref
+                nickname_ref=nickname_ref,
+                type_block=type_profile
             )
             blocks.append(block)
             logger.debug(f"{type_profile}일치 블록 생성 (code={code}, id_ref={id_ref})")
@@ -393,7 +402,7 @@ class BlockProfileManager:
     def _generate_blocks_noprofile(
         self,
         type_profile: Literal["ND", "NC"]
-    ) -> list[BlockProfile]:
+    ) -> list[SingleProfileBlock]:
         """프로필 없음 블록 생성 (ND 또는 NC)
 
         프로필이 없거나 결론을 내릴 수 없는 증거물들의 블록을 생성합니다.
@@ -425,7 +434,7 @@ class BlockProfileManager:
             info = self.info_indexed.loc[[(type_profile, "일반")], :]
 
             # 블록 생성 (id_ref는 "ND" 또는 "NC")
-            block = self._generate_block(info, id_ref=type_profile)
+            block = self._generate_block(info, id_ref=type_profile, type_block=type_profile)
 
             logger.debug(f"{type_profile} 블록 생성 완료 (증거물 수={len(info)})")
             return [block]
@@ -435,7 +444,7 @@ class BlockProfileManager:
             logger.info(f"{type_profile} 프로필이 분류 결과에 없습니다 (건너뜀)")
             return []
     
-    def _generate_blocks_special(self, column, value) -> list[BlockProfile]:
+    def _generate_blocks_special(self, column, value) -> list[SingleProfileBlock]:
         """특수 블록 생성 (예: LC, NX)
 
         지정된 컬럼에서 특정 값을 가진 증거물들의 블록을 생성합니다.
@@ -467,13 +476,83 @@ class BlockProfileManager:
         # 2. 블록 생성
         block = self._generate_block(
             info=info_special,
-            id_ref=value
+            id_ref=value,
+            type_block=value
         )
 
         logger.debug(f"특수 블록 생성 완료 (증거물 수={len(info_special)})")
         return [block]    
             
-       
+    def export_blocks(self, block_type:Literal['single', 'pair'], reaction=False) -> list[ProfileBlock]:
+        """생성된 블록 리스트 반환
+
+        Returns:
+            list[ProfileBlock]: 생성된 모든 블록 리스트
+        """
+        # 단일 블록과 비단일블록 나누기
+        blocks:list = []
+        single_blocks:list[SingleProfileBlock] = []
+        nonsingle_blocks:list[SingleProfileBlock] = []
+        paired_blocks:list[PairedProfileBlock] = []
+        if block_type == 'pair':
+            condition = self.info_written[self.COL_TEXT_EVIDENCE].str.contains('|'.join(KEYWORDS_PAIREDPROFILE))
+            idx_nonsingle_total = self.info_written[condition].index.to_list()
+            for block in self.blocks:
+                idxs_nonsingle = [idx for idx in block.indexes if idx in idx_nonsingle_total]
+                idxs_single = [idx for idx in block.indexes if idx not in idx_nonsingle_total]
+                for idx in idxs_nonsingle:
+                    nonsingle_block = SingleProfileBlock(indexes=[idx], 
+                                                         type_block=block.type_block, 
+                                                         nickname=block.nickname, 
+                                                         id_ref=block.id_ref)
+                    nonsingle_blocks.append(nonsingle_block)
+                profileblock_single = SingleProfileBlock(indexes=idxs_single,
+                                                         type_block=block.type_block,
+                                                         nickname=block.nickname,
+                                                         id_ref=block.id_ref)
+                single_blocks.append(profileblock_single)
+            # PAIRED BLOCK 생성
+            # 1. 따로 따로 생성
+            list_type_paired = []
+            for first_block in nonsingle_blocks:
+                for keyword_first in PAIR_TEXTEVIDENCE.keys():
+                     textevidence_first = str(self.info_written.loc[first_block.indexes, self.COL_TEXT_EVIDENCE])#iloc를 써야 할것 같은데?
+                     textevidence = re.sub(r'\([^)]*\)', '', textevidence_first) #괄호 제거
+                     if keyword_first in textevidence_first:
+                         for second_block in nonsingle_blocks:
+                             textevidence_second = str(self.info_written.loc[second_block.indexes, self.COL_TEXT_EVIDENCE])
+                             text_expected = textevidence + PAIR_TEXTEVIDENCE[keyword_first]
+                             if textevidence_second == text_expected:
+                                 paired_block = PairedProfileBlock(first=first_block, second=second_block, type_block=keyword_first)
+                                 paired_blocks.append(paired_block)
+                                 list_type_paired.append(f"{first_block.type_block}:{second_block.type_block}") # 같은 페어를 합치기 위한 참조 리스트
+            # 2. 합칠 수 있는 것은 합친다. type이 같으면.
+            combined_paired_blocks = []
+            indices_dict = defaultdict(list)
+            for i, value in enumerate(list_type_paired):
+                indices_dict[value].append(i)
+            for idx_paired_blocks in indices_dict.values():
+                indexes_first = []
+                indexes_second = []
+                for idx in idx_paired_blocks:
+                    indexes_first.extend(paired_blocks[idx].first.indexes)
+                    indexes_second.extend(paired_blocks[idx].second.indexes)
+                paired_blocks[idx_paired_blocks[0]].first.indexes = indexes_first
+                paired_blocks[idx_paired_blocks[0]].second.indexes = indexes_second
+                combined_paired_blocks.append(paired_blocks[idx_paired_blocks[0]])
+            blocks = single_blocks + combined_paired_blocks
+        else:
+            blocks = self.blocks
+      
+        # 텍스트 생성
+        for block in blocks:
+            block.text_evidencenumber = self.evidence_text_generator.create_text_evidence(indexes=block.indexes, kit=self.kit, reaction=reaction)
+
+        # 정렬
+        sorted_blocks = sorted(blocks, key=lambda b: b.indexes[0])
+
+        return sorted_blocks
+
 class EvidenceTextGenerator:
     """증거물 ID를 감정서 형식 텍스트로 변환
 
@@ -539,14 +618,14 @@ class EvidenceTextGenerator:
 
     # ==================== Public Interface ====================
 
-    def create_text_evidence(self, list_id: list, kit: str = "STR", reaction: bool = False) -> str:
+    def create_text_evidence(self, indexes: list, kit: str = "STR", reaction: bool = False) -> str:
         """증거물 ID를 감정서 형식 텍스트로 변환
 
         증거물 ID 리스트를 받아 감정서에 사용되는 형식으로 변환합니다.
         연속된 증거물은 "~"로 묶고, 체액 반응 정보를 괄호로 추가할 수 있습니다.
 
         처리 파이프라인:
-        1. 증거물 ID로 DataFrame 필터링 (_filter_evidence_by_ids)
+        1. 증거물 df의 index로 DataFrame 필터링 (_filter_evidence_by_idx)
         2. 특수 케이스 처리 (0개, 1개, 2개 증거물)
         3. 체액 반응 정보 추가 (reaction=True인 경우, _add_reaction_info)
         4. 연속된 증거물 그룹화 (_group_consecutive_evidence)
@@ -577,10 +656,10 @@ class EvidenceTextGenerator:
             _group_consecutive_evidence: 연속 증거물 그룹화
             _format_evidence_text: 최종 텍스트 포맷팅
         """
-        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(list_id)}, reaction={reaction})")
+        logger.debug(f"증거물 텍스트 생성 시작 (kit={kit}, 증거물 수={len(indexes)}, reaction={reaction})")
 
         # 1. 데이터 필터링
-        filtered_df = self._filter_evidence_by_ids(list_id, kit)
+        filtered_df = self._filter_evidence_by_index(indexes, kit)
 
         # 2. 체액 반응 값 생성
         if reaction:
@@ -615,7 +694,7 @@ class EvidenceTextGenerator:
 
     # ==================== 데이터 전처리 ====================
 
-    def _filter_evidence_by_ids(self, list_id: list, kit: str) -> pd.DataFrame:
+    def _filter_evidence_by_index(self, indexes: list, kit: str) -> pd.DataFrame:
         """감정물번호 리스트로 증거물 데이터 필터링 및 전처리
 
         미기재 증거물을 제외하고, 지정된 감정물번호만 필터링합니다.
@@ -637,7 +716,7 @@ class EvidenceTextGenerator:
             >>> len(filtered)
             1
         """
-        logger.debug(f"증거물 필터링 시작 (kit={kit}, 입력 ID 수={len(list_id)})")
+        logger.debug(f"증거물 필터링 시작 (kit={kit}, 입력 IDX 수={len(indexes)})")
 
         # 키트별 컬럼명 결정
         if kit not in COLNAME_PER_KIT:
@@ -660,8 +739,8 @@ class EvidenceTextGenerator:
         # 이렇게 해야 원본 데이터셋에서의 실제 연속성을 정확히 판단할 수 있음
         df["감정물번호_다음"] = df["감정물번호"].shift(-1)
 
-        # 4단계: 지정된 감정물번호만 필터링
-        df = df[df["감정물번호"].isin(list_id)]
+        # 4단계: 지정된 index만 필터링
+        df = df.loc[indexes]
         logger.debug(f"ID 필터링 후 데이터 크기: {len(df)}")
 
         return df.reset_index(drop=True)

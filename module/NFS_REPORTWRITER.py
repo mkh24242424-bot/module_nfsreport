@@ -6,7 +6,7 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY
-from .NFS_BLOCKMANAGER import BlockProfileManager, BlockProfile
+from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
 logger = logging.getLogger(__name__) 
 
@@ -156,7 +156,7 @@ class NFSReportWriter:
     def _get_processed_evidence_num(self, df_subset) -> str:
         """증거물번호 전처리"""
         list_id = df_subset['감정물번호'].tolist()
-        text_num = self.blocks_manager['STR'].evidence_text_generator.create_text_evidence(list_id=list_id, kit="STR")
+        text_num = self.blocks_manager['STR'].evidence_text_generator.create_text_evidence(indexes=list_id, kit="STR")
         text_num = re.sub(r"\(상피세포층\)|\(정자층\)|[a-zA-Z]", "", text_num)
         text_num = " 및 ".join(dict.fromkeys(text_num.split(" 및 ")))
         text_num = ", ".join(dict.fromkeys(text_num.split(", ")))
@@ -164,13 +164,13 @@ class NFSReportWriter:
 
     def _make_contents_from_block(
         self,
-        block: BlockProfile,
+        block: SingleProfileBlock,
         phraser: Callable,
         kit: Literal["STR", "YSTR"] = "STR"
     ) -> str:
         """블록 프로필로부터 감정 결과 문구 생성
 
-        BlockProfile과 phraser 함수를 사용하여 감정서 결과 문구를 생성합니다.
+        ProfileBlock과 phraser 함수를 사용하여 감정서 결과 문구를 생성합니다.
         성별과 우도비(likelihood ratio)를 추출하여 Properties_Phrase 객체를 만들고,
         phraser 함수에 전달합니다.
 
@@ -183,7 +183,7 @@ class NFSReportWriter:
             str: 생성된 감정 결과 문구
 
         Examples:
-            >>> block = BlockProfile(...)
+            >>> block = ProfileBlock(...)
             >>> phrase = writer._make_contents_from_block(block, make_phrase_ref, "STR")
 
         See Also:
@@ -200,7 +200,7 @@ class NFSReportWriter:
         properties = NFS_RP.Properties_Phrase(
             gender=gender,
             likelihoodratio=lr,
-            text_evidence=block.text_phrase,
+            text_evidence=block.text_evidencenumber,
             nickname=block.nickname
         )
 
@@ -208,6 +208,25 @@ class NFSReportWriter:
         phrase = phraser(properties)
         logger.debug(f"결과 문구 생성 완료 (길이={len(phrase)})")
         return phrase
+
+    def _make_contents_from_paired_block(
+        self,
+        block: PairedProfileBlock,
+        phrasers: dict,
+        kit: Literal["STR", "YSTR"] = "STR"
+    ) -> str:
+        """페어 블록 프로필로부터 감정 결과 문구 생성
+        """
+        logger.debug(f"결과 문구 생성 시작 (kit={kit}")
+        text_evidence = block.text_evidencenumber.replace(f"({block.type_block})", "") #타입 텍스트 지우기
+        phraser = phrasers[block.type_block]
+        first_phrase = self._make_contents_from_block(block.first, phraser=phrasers[block.first.type_block], kit=kit)
+        second_phrase = self._make_contents_from_block(block.second, phraser=phrasers[block.second.type_block], kit=kit)
+        phrase = phraser(text_evidence, first_phrase, second_phrase)
+
+        logger.debug(f"결과 문구 생성 완료 (길이={len(phrase)})")
+        return phrase
+    
 
     def _make_contents_experiment_result(
         self,
@@ -243,20 +262,21 @@ class NFSReportWriter:
 
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
-                # 블록이 존재하지 않으면 스킵
-                if block_type not in block_manager.blocks:
-                    logger.warning(f"{kit}의 '{block_type}' 블록 타입이 존재하지 않습니다.")
-                    continue
 
-                blocks = block_manager.blocks[block_type]
+                blocks = [block for block in block_manager.blocks if block.type_block==block_type]
+                if len(blocks)==0:
+                    continue
                 phraser = kit_phrasers[block_type]
 
                 for block in blocks:
-                    phrase = self._make_contents_from_block(
-                        block,
-                        phraser=phraser,
-                        kit=kit
-                    )
+                    if isinstance(block, PairedProfileBlock):
+                        phrase = self._make_contents_from_paired_block(block, kit_phrasers, kit=kit)
+                    else: #SingleProfileBlock
+                        phrase = self._make_contents_from_block(
+                            block,
+                            phraser=phraser,
+                            kit=kit
+                        )
                     phrases_result.append(phrase)
                     logger.debug(
                         f"{kit} {block_type} 문구 생성 "
