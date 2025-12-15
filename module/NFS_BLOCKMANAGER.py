@@ -588,10 +588,10 @@ class BlockProfileManager:
             text = self.info_written.loc[block.indexes[0], self.COL_TEXT_EVIDENCE]
 
             # base_text 추출: "증1호(상피세포층)" → "증1호"
-            base_text = re.sub(r'\([^)]*\)', '', text)
+            base_text = re.sub(r'\([^)]*\)', '', text) # type: ignore
 
             # 괄호 안 키워드 추출: "증1호(상피세포층)" → "상피세포층"
-            match = re.search(r'\(([^)]*)\)', text)
+            match = re.search(r'\(([^)]*)\)', text) # type: ignore
             if not match:
                 continue
             keyword = match.group(1)
@@ -754,7 +754,7 @@ class BlockProfileManager:
         # ========================================
         logger.debug(f"증거물 텍스트 생성 시작 (블록 수={len(blocks)})")
         for block in blocks:
-            block.text_evidencenumber = self.evidence_text_generator.create_text_evidence(
+            block.text_evidencenumber = self.evidence_text_generator.create_text_evidence( # type: ignore
                 indexes=block.indexes,
                 kit=self.kit,
                 reaction=reaction
@@ -765,7 +765,7 @@ class BlockProfileManager:
         sorted_blocks = sorted(blocks, key=lambda b: b.indexes[0])
         logger.debug(f"블록 정렬 완료 (총 {len(sorted_blocks)}개 블록 반환)")
 
-        return sorted_blocks
+        return sorted_blocks # type: ignore
 
 class EvidenceTextGenerator:
     """증거물 ID를 감정서 형식 텍스트로 변환
