@@ -419,11 +419,17 @@ class NFSReportWriter:
             if not any(kw in item for kw in KEYWORD_IGNORE_EVIDENCE):
                 evidence[key] = item
         
-        # 2. 키 정규화 (M/F, a/b 등 접미사 제거)
+        # 2. 키 정규화 (M/F, a/b 등 접미사 철;)
         normalized = {}
         for key, item in evidence.items():
-            if key.endswith(('M', 'F')) or key[-1].isalpha():
+            if key.endswith(('M', 'F')):
                 normalized[key[:-1]] = item
+            elif key[-1].isalpha():
+                if key[-1]=='a':
+                    normalized[key[:-1]] = item
+                    normalized[key] = item
+                else:
+                    normalized[key] = item
             else:
                 normalized[key] = item
         
