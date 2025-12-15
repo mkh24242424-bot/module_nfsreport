@@ -483,90 +483,175 @@ class BlockProfileManager:
         logger.debug(f"특수 블록 생성 완료 (증거물 수={len(info_special)})")
         return [block]    
             
-    def export_blocks(self, block_type:Literal['single', 'pair'], reaction=False) -> list[ProfileBlock]:
-        """생성된 블록 리스트 반환
+    def _create_paired_blocks(
+        self,
+        nonsingle_blocks: list[SingleProfileBlock]
+    ) -> list[PairedProfileBlock]:
+        """Paired block 생성 - 분류 → 매칭 → 합치기를 한 번에 처리
+
+        DNA 감정에서 동일 시료의 상피세포층/정자층, 추정형/검출형은 쌍으로 처리해야 합니다.
+        이 메소드는 nonsingle_blocks에서 쌍을 찾아 PairedProfileBlock으로 묶습니다.
+
+        처리 흐름:
+        1. 분류 단계: 각 블록을 first 후보(상피세포층, 추정형)와 second 후보(정자층, 검출형)로 분류
+        2. 매칭 단계: 같은 base_text와 type_block을 가진 first-second 쌍 찾기
+        3. 합치기 단계: 같은 조건의 블록들은 indexes를 합쳐서 하나의 PairedProfileBlock으로 생성
+
+        Args:
+            nonsingle_blocks: paired 처리 대상 블록들 (각 블록은 단일 index를 가짐)
 
         Returns:
-            list[ProfileBlock]: 생성된 모든 블록 리스트
+            list[PairedProfileBlock]: 매칭된 paired block 리스트
+
+        Example:
+            입력: [증1호(상피세포층), 증1호(정자층), 증2호(상피세포층), 증2호(정자층)]
+            출력: [PairedProfileBlock(first=[증1호,증2호 상피세포층], second=[증1호,증2호 정자층])]
         """
-        # 단일 블록과 비단일블록 나누기
-        blocks:list = []
-        single_blocks:list[SingleProfileBlock] = []
-        nonsingle_blocks:list[SingleProfileBlock] = []
-        paired_blocks:list[PairedProfileBlock] = []
+        # ========================================
+        # 1단계: 블록 분류
+        # ========================================
+        # key: (base_text, keyword, type_block)
+        #   - base_text: 괄호 제외한 텍스트 (예: "증1호")
+        #   - keyword: 괄호 안 키워드 (예: "상피세포층")
+        #   - type_block: 프로필 유형 (예: "대조일치")
+        # value: 해당 조건에 맞는 블록들의 리스트
+        first_candidates = defaultdict(list)   # 상피세포층, 추정형 → first가 될 후보
+        second_candidates = defaultdict(list)  # 정자층, 검출형 → second가 될 후보
+
+        for block in nonsingle_blocks:
+            text = self.info_written.loc[block.indexes[0], self.COL_TEXT_EVIDENCE]
+
+            # base_text 추출: "증1호(상피세포층)" → "증1호"
+            base_text = re.sub(r'\([^)]*\)', '', text)
+
+            # 괄호 안 키워드 추출: "증1호(상피세포층)" → "상피세포층"
+            match = re.search(r'\(([^)]*)\)', text)
+            if not match:
+                continue
+            keyword = match.group(1)
+
+            # first/second 후보로 분류
+            # PAIR_TEXTEVIDENCE = {"상피세포층": "정자층", "추정형": "검출형"}
+            key = (base_text, keyword, block.type_block)
+            if keyword in PAIR_TEXTEVIDENCE:
+                # "상피세포층", "추정형" → first 후보
+                first_candidates[key].append(block)
+            elif keyword in PAIR_TEXTEVIDENCE.values():
+                # "정자층", "검출형" → second 후보
+                second_candidates[key].append(block)
+
+        # ========================================
+        # 2단계: 매칭 + 합치기
+        # ========================================
+        # first 후보들을 순회하며 매칭되는 second 후보 찾기
+        # 같은 (base_text, type_block)을 가진 블록들의 indexes를 합침
+        paired_blocks = []
+
+        for (base_text, first_keyword, type_block), first_list in first_candidates.items():
+            # first_keyword에 대응하는 second_keyword 찾기
+            # 예: "상피세포층" → "정자층"
+            second_keyword = PAIR_TEXTEVIDENCE[first_keyword]
+            second_key = (base_text, second_keyword, type_block)
+            second_list = second_candidates.get(second_key, [])
+
+            # 매칭되는 second가 없으면 건너뛰기
+            if not second_list:
+                continue
+
+            # 같은 조건의 블록들 indexes 합치기
+            # 예: [블록A(idx=0), 블록B(idx=2)] → indexes=[0, 2]
+            first_indexes = [idx for block in first_list for idx in block.indexes]
+            second_indexes = [idx for block in second_list for idx in block.indexes]
+
+            # PairedProfileBlock 생성
+            # 첫 번째 블록의 메타정보(nickname, id_ref) 사용
+            paired_blocks.append(PairedProfileBlock(
+                first=SingleProfileBlock(
+                    indexes=first_indexes,
+                    type_block=type_block,
+                    nickname=first_list[0].nickname,
+                    id_ref=first_list[0].id_ref
+                ),
+                second=SingleProfileBlock(
+                    indexes=second_indexes,
+                    type_block=type_block,
+                    nickname=second_list[0].nickname,
+                    id_ref=second_list[0].id_ref
+                ),
+                type_block=first_keyword  # "상피세포층" 또는 "추정형"
+            ))
+
+        return paired_blocks
+
+    def export_blocks(self, block_type: Literal['single', 'pair'], reaction: bool = False) -> list[ProfileBlock]:
+        """생성된 블록 리스트 반환
+
+        Args:
+            block_type: 'single'이면 일반 블록, 'pair'이면 paired 처리된 블록
+            reaction: True이면 체액반응 정보를 텍스트에 포함
+
+        Returns:
+            list[ProfileBlock]: 정렬된 블록 리스트
+        """
         if block_type == 'pair':
+            # ========================================
+            # pair 모드: 상피세포층/정자층 등을 쌍으로 묶어서 처리
+            # ========================================
+
+            # 1. paired 키워드가 포함된 증거물 index 추출
+            # KEYWORDS_PAIREDPROFILE = ["상피세포층", "정자층", "검출형", "추정형"]
             condition = self.info_written[self.COL_TEXT_EVIDENCE].str.contains('|'.join(KEYWORDS_PAIREDPROFILE))
             idx_nonsingle_total = self.info_written[condition].index.to_list()
-            for block in self.blocks:
-                idxs_nonsingle = [idx for idx in block.indexes if idx in idx_nonsingle_total]
-                idxs_single = [idx for idx in block.indexes if idx not in idx_nonsingle_total]
-                for idx in idxs_nonsingle:
-                    nonsingle_block = SingleProfileBlock(indexes=[idx], 
-                                                         type_block=block.type_block, 
-                                                         nickname=block.nickname, 
-                                                         id_ref=block.id_ref)
-                    nonsingle_blocks.append(nonsingle_block)
-                if idxs_single:  # 빈 블록 생성 방지
-                    profileblock_single = SingleProfileBlock(indexes=idxs_single,
-                                                             type_block=block.type_block,
-                                                             nickname=block.nickname,
-                                                             id_ref=block.id_ref)
-                    single_blocks.append(profileblock_single)
-            # PAIRED BLOCK 생성
-            # 1. 따로 따로 생성
-            list_type_paired = []
-            for first_block in nonsingle_blocks:
-                for keyword_first in PAIR_TEXTEVIDENCE.keys():
-                     textevidence_first = self.info_written.loc[first_block.indexes[0], self.COL_TEXT_EVIDENCE]
-                     textevidence = re.sub(r'\([^)]*\)', '', textevidence_first)  # 괄호 제거
-                     if keyword_first in textevidence_first:
-                         for second_block in nonsingle_blocks:
-                             textevidence_second = self.info_written.loc[second_block.indexes[0], self.COL_TEXT_EVIDENCE]
-                             text_expected = f"{textevidence}({PAIR_TEXTEVIDENCE[keyword_first]})"
-                             if textevidence_second == text_expected:
-                                 paired_block = PairedProfileBlock(first=first_block, second=second_block, type_block=keyword_first)
-                                 paired_blocks.append(paired_block)
-                                 list_type_paired.append(f"{first_block.type_block}:{second_block.type_block}") # 같은 페어를 합치기 위한 참조 리스트
-            # 2. 합칠 수 있는 것은 합친다. type이 같으면.
-            combined_paired_blocks = []
-            indices_dict = defaultdict(list)
-            for i, value in enumerate(list_type_paired):
-                indices_dict[value].append(i)
-            for idx_paired_blocks in indices_dict.values():
-                indexes_first = []
-                indexes_second = []
-                for idx in idx_paired_blocks:
-                    indexes_first.extend(paired_blocks[idx].first.indexes)
-                    indexes_second.extend(paired_blocks[idx].second.indexes)
-                # 원본 수정 대신 새 객체 생성
-                base_block = paired_blocks[idx_paired_blocks[0]]
-                combined_first = SingleProfileBlock(
-                    indexes=indexes_first,
-                    type_block=base_block.first.type_block,
-                    nickname=base_block.first.nickname,
-                    id_ref=base_block.first.id_ref
-                )
-                combined_second = SingleProfileBlock(
-                    indexes=indexes_second,
-                    type_block=base_block.second.type_block,
-                    nickname=base_block.second.nickname,
-                    id_ref=base_block.second.id_ref
-                )
-                combined_block = PairedProfileBlock(
-                    first=combined_first,
-                    second=combined_second,
-                    type_block=base_block.type_block
-                )
-                combined_paired_blocks.append(combined_block)
-            blocks = single_blocks + combined_paired_blocks
-        else:
-            blocks = self.blocks
-      
-        # 텍스트 생성
-        for block in blocks:
-            block.text_evidencenumber = self.evidence_text_generator.create_text_evidence(indexes=block.indexes, kit=self.kit, reaction=reaction)
 
-        # 정렬
+            # 2. 기존 블록들을 single_blocks와 nonsingle_blocks로 분리
+            single_blocks: list[SingleProfileBlock] = []
+            nonsingle_blocks: list[SingleProfileBlock] = []
+
+            for block in self.blocks:
+                # nonsingle: paired 키워드가 있는 index들
+                idxs_nonsingle = [idx for idx in block.indexes if idx in idx_nonsingle_total]
+                # single: paired 키워드가 없는 index들
+                idxs_single = [idx for idx in block.indexes if idx not in idx_nonsingle_total]
+
+                # nonsingle은 개별 블록으로 분리 (각각 단일 index)
+                # → 나중에 paired 매칭 시 개별 처리 필요
+                for idx in idxs_nonsingle:
+                    nonsingle_blocks.append(SingleProfileBlock(
+                        indexes=[idx],
+                        type_block=block.type_block,
+                        nickname=block.nickname,
+                        id_ref=block.id_ref
+                    ))
+
+                # single은 그대로 유지
+                if idxs_single:
+                    single_blocks.append(SingleProfileBlock(
+                        indexes=idxs_single,
+                        type_block=block.type_block,
+                        nickname=block.nickname,
+                        id_ref=block.id_ref
+                    ))
+
+            # 3. Paired blocks 생성
+            paired_blocks = self._create_paired_blocks(nonsingle_blocks)
+
+            # 4. single + paired 합치기
+            blocks = single_blocks + paired_blocks
+        else:
+            # single 모드: 기존 블록 그대로 사용
+            blocks = self.blocks
+
+        # ========================================
+        # 공통 처리: 텍스트 생성 및 정렬
+        # ========================================
+        for block in blocks:
+            block.text_evidencenumber = self.evidence_text_generator.create_text_evidence(
+                indexes=block.indexes,
+                kit=self.kit,
+                reaction=reaction
+            )
+
+        # index 기준 오름차순 정렬
         sorted_blocks = sorted(blocks, key=lambda b: b.indexes[0])
 
         return sorted_blocks
