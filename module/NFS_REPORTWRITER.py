@@ -212,12 +212,26 @@ class NFSReportWriter:
     def _make_contents_from_paired_block(
         self,
         block: PairedProfileBlock,
-        phrasers: dict,
+        phrasers: Dict[str, Callable],
         kit: Literal["STR", "YSTR"] = "STR"
     ) -> str:
         """페어 블록 프로필로부터 감정 결과 문구 생성
+
+        PairedProfileBlock(상피세포층/정자층 쌍)을 받아 두 개의 SingleProfileBlock에 대한
+        결과 문구를 각각 생성하고, 이를 합쳐 최종 문구를 반환합니다.
+
+        Args:
+            block: 페어 블록 프로필 객체 (first, second SingleProfileBlock 포함)
+            phrasers: 블록 타입별 phraser 함수 딕셔너리
+            kit: 키트 종류. 기본값은 "STR"
+
+        Returns:
+            str: 생성된 감정 결과 문구
+
+        See Also:
+            _make_contents_from_block: 단일 블록 문구 생성
         """
-        logger.debug(f"결과 문구 생성 시작 (kit={kit}")
+        logger.debug(f"결과 문구 생성 시작 (kit={kit}, type={block.type_block})")
         text_evidence = block.text_evidencenumber.replace(f"({block.type_block})", "") #타입 텍스트 지우기
         phraser = phrasers[block.type_block]
         first_phrase = self._make_contents_from_block(block.first, phraser=phrasers[block.first.type_block], kit=kit)
