@@ -527,17 +527,17 @@ class BlockProfileManager:
         처리 흐름:
         1. 분류 단계:
            - 각 블록의 text_evidencenumber에서 괄호 안 키워드 추출
-           - base_text (괄호 제외), keyword, type_block을 기준으로 분류
+           - keyword, type_block을 기준으로 분류
            - first 후보: "상피세포층", "추정형"
            - second 후보: "정자층", "검출형"
 
         2. 매칭 단계:
-           - 같은 (base_text, type_block)을 가진 first-second 쌍 찾기
+           - 같은 type_block을 가진 first-second 쌍 찾기
            - PAIR_TEXTEVIDENCE 딕셔너리 사용 (예: "상피세포층" → "정자층")
 
         3. 합치기 단계:
-           - 같은 조건의 블록들의 indexes를 합쳐서 하나의 PairedProfileBlock 생성
-           - 예: 같은 base_text와 type_block을 가진 여러 블록 → 하나의 PairedProfileBlock
+           - 같은 (keyword, type_block)을 가진 블록들의 indexes를 합쳐서 하나의 PairedProfileBlock 생성
+           - 예: 같은 type_block을 가진 모든 상피세포층 → first, 모든 정자층 → second
 
         Args:
             nonsingle_blocks: paired 처리 대상 블록들 (각 블록은 단일 index를 가짐)
@@ -572,19 +572,18 @@ class BlockProfileManager:
         # ========================================
         # 1단계: 블록 분류
         # ========================================
-        # key: (base_text, keyword, type_block)
-        #   - base_text: 괄호 제외한 텍스트 (예: "증1호")
+        # key: (keyword, type_block)
         #   - keyword: 괄호 안 키워드 (예: "상피세포층")
         #   - type_block: 프로필 유형 (예: "대조일치")
         # value: 해당 조건에 맞는 블록들의 리스트
+        #
+        # 같은 keyword와 type_block을 가진 블록들을 합쳐서 통합 PairedProfileBlock 생성
+        # 예: 증1호(상피세포층) + 증2호(상피세포층) → 하나의 first로 합침
         first_candidates = defaultdict(list)   # 상피세포층, 추정형 → first가 될 후보
         second_candidates = defaultdict(list)  # 정자층, 검출형 → second가 될 후보
 
         for block in nonsingle_blocks:
             text = self.info_written.loc[block.indexes[0], self.COL_TEXT_EVIDENCE]
-
-            # base_text 추출: "증1호(상피세포층)" → "증1호"
-            base_text = re.sub(r'\([^)]*\)', '', text) # type: ignore
 
             # 괄호 안 키워드 추출: "증1호(상피세포층)" → "상피세포층"
             match = re.search(r'\(([^)]*)\)', text) # type: ignore
@@ -594,7 +593,8 @@ class BlockProfileManager:
 
             # first/second 후보로 분류
             # PAIR_TEXTEVIDENCE = {"상피세포층": "정자층", "추정형": "검출형"}
-            key = (base_text, keyword, block.type_block)
+            # key에서 base_text 제거: 같은 type_block의 블록들을 모두 합치기 위함
+            key = (keyword, block.type_block)
             if keyword in PAIR_TEXTEVIDENCE:
                 # "상피세포층", "추정형" → first 후보
                 first_candidates[key].append(block)
@@ -606,27 +606,27 @@ class BlockProfileManager:
         # 2단계: 매칭 + 합치기
         # ========================================
         # first 후보들을 순회하며 매칭되는 second 후보 찾기
-        # 같은 (base_text, type_block)을 가진 블록들의 indexes를 합침
+        # 같은 (keyword, type_block)을 가진 블록들의 indexes를 합침
         logger.debug(f"블록 분류 완료 (first_candidates={len(first_candidates)}, second_candidates={len(second_candidates)})")
         paired_blocks = []
 
-        for (base_text, first_keyword, type_block), first_list in first_candidates.items():
+        for (first_keyword, type_block), first_list in first_candidates.items():
             # first_keyword에 대응하는 second_keyword 찾기
             # 예: "상피세포층" → "정자층"
             second_keyword = PAIR_TEXTEVIDENCE[first_keyword]
-            second_key = (base_text, second_keyword, type_block)
+            second_key = (second_keyword, type_block)
             second_list = second_candidates.get(second_key, [])
 
             # 매칭되는 second가 없으면 건너뛰기
             if not second_list:
-                logger.warning(f"매칭되는 second 블록이 없음 (base_text={base_text}, first_keyword={first_keyword}, type_block={type_block})")
+                logger.warning(f"매칭되는 second 블록이 없음 (first_keyword={first_keyword}, type_block={type_block})")
                 continue
 
             # 같은 조건의 블록들 indexes 합치기
             # 예: [블록A(idx=0), 블록B(idx=2)] → indexes=[0, 2]
             first_indexes = [idx for block in first_list for idx in block.indexes]
             second_indexes = [idx for block in second_list for idx in block.indexes]
-            logger.debug(f"paired 블록 매칭 (base_text={base_text}, first_keyword={first_keyword}, first_indexes={first_indexes}, second_indexes={second_indexes})")
+            logger.debug(f"paired 블록 매칭 (first_keyword={first_keyword}, type_block={type_block}, first_indexes={first_indexes}, second_indexes={second_indexes})")
 
             # PairedProfileBlock 생성
             first=SingleProfileBlock(
