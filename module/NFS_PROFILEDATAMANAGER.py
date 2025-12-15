@@ -746,6 +746,31 @@ class NFSProfileDataManager:
         logger.debug(f"STRProfile 생성 완료 (samplename={samplename}, 좌위 수={len(dict_profile_set)})")
         return NFS_SP.STRProfile(id=samplename, profile=dict_profile_set)
 
+    def generate_NoProfile(
+        self, type_noprofile: str, STR_20: bool = False
+    ) -> NFS_SP.STRProfile:
+        """프로필이 배정되지 않은 노 프로파일 객체를 생성
+
+        Args:
+            type_noprofile: 노 프로파일 타입
+            STR_20: 20개 마커 사용 여부. 기본값은 False
+
+        Returns:
+            STRProfile: 생성된 STR 프로파일 객체
+        """
+        logger.debug(f"NoProfile 생성 시작 (samplename={type_noprofile}, STR_20={STR_20})")
+        # 마커 리스트 결정: STR 키트에서 STR_20이 True이면 STR20 마커 사용
+        marker_key = "STR20" if (STR_20 and self.kit == "STR") else self.kit
+        list_markers = DICT_MARKERS[marker_key]
+
+        # 프로파일 딕셔너리 생성
+        dict_profile_set = {}
+        for marker in list_markers:
+            dict_profile_set[marker] = set(type_noprofile)
+
+        logger.debug(f"STRProfile 생성 완료 (samplename={type_noprofile}, 좌위 수={len(dict_profile_set)})")
+        return NFS_SP.STRProfile(id=type_noprofile, profile=dict_profile_set)
+
     def generate_empty_STRProfile(self, samplename: str = "") -> NFS_SP.STRProfile:
         """지정된 키트의 모든 마커에 대해 빈 값을 가진 STR 프로파일 객체를 생성
 

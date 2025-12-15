@@ -79,17 +79,17 @@ def make_pharase_differential_extraction(text_evidence: str, phrase_nonsperm:str
         phrase_pair = f"{text_evidence}은 {reaction.group(1)}이고,"
     else:
         phrase_pair = f"{text_evidence}은, " 
-    phrase_nonsperm = re.sub(r'\([^)]*\)', '', phrase_nonsperm)
-    phrase_nonsperm = re.sub(r'증\([^)]+\)호', '상피세포층', phrase_nonsperm)
-    phrase_sperm = re.sub(r'\([^)]*\)', '', phrase_sperm)
-    phrase_sperm = re.sub(r'증\([^)]+\)호', '정자층', phrase_sperm)
+    # phrase_nonsperm = re.sub(r'\([^)]*\)', '', phrase_nonsperm)
+    # phrase_nonsperm = re.sub(r'증\([^)]+\)호', '상피세포층', phrase_nonsperm)
+    # phrase_sperm = re.sub(r'\([^)]*\)', '', phrase_sperm)
+    # phrase_sperm = re.sub(r'증\([^)]+\)호', '정자층', phrase_sperm)
     phrase = f"{phrase_pair}\r\n-{phrase_nonsperm}\r\n-{phrase_sperm}"
     return phrase
 
 def make_pharase_presume(text_evidence: str, phrase_detected:str, phrase_presumed:str) -> str:
     text_evidence = re.sub(r'\([^)]*\)', '', text_evidence)
-    phrase_detected = phrase_detected.split("에서 ")[1].replace("됨.", "되고, ")
-    phrase_presumed = phrase_presumed.split("에서 ")[1].replace("이 검출됨.", "을 추정할 수 있음.") 
+    phrase_detected = phrase_detected.replace("됨.", "되고, ")
+    phrase_presumed = phrase_presumed.replace("이 검출됨.", "을 추정할 수 있음.") 
     phrase = f"{text_evidence}에서 {phrase_detected}{phrase_presumed}"
     return phrase
 

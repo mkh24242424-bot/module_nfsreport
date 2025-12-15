@@ -633,20 +633,23 @@ class BlockProfileManager:
             logger.debug(f"paired 블록 매칭 (base_text={base_text}, first_keyword={first_keyword}, first_indexes={first_indexes}, second_indexes={second_indexes})")
 
             # PairedProfileBlock 생성
-            # 첫 번째 블록의 메타정보(nickname, id_ref) 사용
-            paired_blocks.append(PairedProfileBlock(
-                first=SingleProfileBlock(
+            first=SingleProfileBlock(
                     indexes=first_indexes,
                     type_block=type_block,
                     nickname=first_list[0].nickname,
-                    id_ref=first_list[0].id_ref
-                ),
-                second=SingleProfileBlock(
+                    id_ref=first_list[0].id_ref)
+            first.text_evidencenumber = first_keyword
+            second=SingleProfileBlock(
                     indexes=second_indexes,
                     type_block=type_block,
                     nickname=second_list[0].nickname,
                     id_ref=second_list[0].id_ref
-                ),
+                )
+            second.text_evidencenumber = second_keyword
+            # 첫 번째 블록의 메타정보(nickname, id_ref) 사용
+            paired_blocks.append(PairedProfileBlock(
+                first=first,
+                second=second,
                 type_block=first_keyword  # "상피세포층" 또는 "추정형"
             ))
 

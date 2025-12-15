@@ -20,6 +20,19 @@ NAME_FIELDTEXT ={
     "소속": "position",
 }
 
+NAME_FIELDTABLE = {
+    "TABLE_STR_FIRSTCELL": "TABLE_STR_FIRSTCELL",
+    "STR_FIRSTCOL": "STR_FIRSTCOL",
+    "STR_ETC":"STR_ETC",
+    "TABLE_YSTR_FIRSTCELL": "TABLE_YSTR_FIRSTCELL",
+    "YSTR_FIRSTCOL":"YSTR_FIRSTCOL",
+    "YSTR_ETC":"YSTR_ETC",
+    "TABLE_IMG_MULTI_FIRSTCELL":"TABLE_IMG_MULTI_FIRSTCELL",
+    "IMG_MULTI_FIRST":"IMG_MULTI_FIRST",
+    "TABLE_IMG_ONE_FIRSTCELL":"TABLE_IMG_ONE_FIRSTCELL",
+    "IMG_ONE":"IMG_ONE"
+}
+
 # 도장 관련 데이터클래스
 @dataclass
 class SealField:
@@ -31,3 +44,5 @@ LIST_SEALFIELD= [
     SealField(field_name="#이름5", field_img="#도장5"),
     SealField(field_name="#이름6", field_img="#도장6"),
 ]
+
+KEYWORDS_PAIREDPROFILE = ["상피세포층", "정자층", "검출형", "추정형"]

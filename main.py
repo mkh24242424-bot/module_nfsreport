@@ -10,7 +10,7 @@ import module.NFS_BLOCKMANAGER as NFS_BM
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.CRITICAL,
+    level=logging.DEBUG,
     format='[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s:%(lineno)d] - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -121,6 +121,14 @@ sealinfo = [
 ]
 hwp_formatter.fill_seal(sealinfo=sealinfo)
 
+data_profile = RW.make_contents_profile_blocks(kit="STR20")
+
+hwp_formatter.fill_table_profile(serialized_profile=data_profile, kit="STR20")
+
+data_profile = RW.make_contents_profile_blocks(kit="YSTR")
+hwp_formatter.fill_table_profile(serialized_profile=data_profile, kit="YSTR")
 logger.info("========== 프로그램 종료 ==========")
+
+
 
 

@@ -10,6 +10,11 @@ import module.NFS_REPORTPHRASER as NFS_RP
 from dataclasses import dataclass
 from typing import Callable
 
+from typing import Dict, List
+
+# ==================== 키트별 유전자 마커 정의 ====================
+# 키트마다 사용하는 좌위 마커를 감정서 표에 나열되는 순서대로 작성한 리스트.
+
 # Type alias for phraser mapping
 PhraserMapping = Dict[str, Dict[str, Callable]]
 
@@ -154,6 +159,8 @@ ETC_CONDITIONS: list[EtcCondition] = [
 ]
 
 PHRASE_EMPTY = "{text_num}은 내용물 없음\r\n"
+
+KEYWORDS_NOPROFILE = ["NC", "ND"]
 
 # Valid report type names (for validation)
 VALID_REPORT_TYPES = set(REPORT_TYPE_PHRASERS.keys())

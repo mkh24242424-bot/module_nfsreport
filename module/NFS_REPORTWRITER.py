@@ -5,7 +5,9 @@ from . import NFS_REPORTPHRASER as NFS_RP
 from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
-        REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY
+        REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
+        KEYWORDS_NOPROFILE
+from .constants_strprofile import DICT_MARKERS
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
 logger = logging.getLogger(__name__) 
@@ -153,6 +155,36 @@ class NFSReportWriter:
             )
             return ""   
 
+    def _extract_profile_data(self, id_ref, kit:Literal["STR", "STR20", "YSTR"]) -> dict[str,str]:
+        if kit in ["STR20", "STR"]:
+            profile_manager = self.report_data.pm_str
+        else:  # YSTR
+            profile_manager = self.report_data.pm_ystr
+        flag_STR_20 = True if kit=='STR20' else False
+        try:
+            if profile_manager is not None:
+                if id_ref in KEYWORDS_NOPROFILE:
+                    return profile_manager.generate_NoProfile(type_noprofile=id_ref, STR_20=flag_STR_20).export_to_str()
+                else:
+                    return profile_manager.generate_STRProfile(samplename=id_ref, STR_20=flag_STR_20).export_to_str() 
+            else:
+                logger.warning(
+                    f"{kit} ProfileDataManager가 None입니다 "
+                )
+                return {}
+        except Exception as e:
+            logger.warning(
+                f"프로필 추출 실패 (kit={kit}, id_ref={id_ref}): {e}. "
+                f"빈 값 반환"
+            )
+            return {}   
+
+  
+
+        
+        return []
+    
+    
     def _get_processed_evidence_num(self, df_subset) -> str:
         """증거물번호 전처리"""
         list_id = df_subset['감정물번호'].tolist()
@@ -240,7 +272,6 @@ class NFSReportWriter:
 
         logger.debug(f"결과 문구 생성 완료 (길이={len(phrase)})")
         return phrase
-    
 
     def _make_contents_experiment_result(
         self,
@@ -273,11 +304,10 @@ class NFSReportWriter:
             logger.debug(f"{kit} 블록 처리 시작")
             block_manager = self.blocks_manager[kit]
             kit_phrasers = phrasers[kit]
-
+            blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
-
-                blocks = [block for block in block_manager.blocks if block.type_block==block_type]
+                blocks = [block for block in blocks_exported if block.type_block==block_type]
                 if len(blocks)==0:
                     continue
                 phraser = kit_phrasers[block_type]
@@ -287,14 +317,13 @@ class NFSReportWriter:
                         phrase = self._make_contents_from_paired_block(block, kit_phrasers, kit=kit)
                     else: #SingleProfileBlock
                         phrase = self._make_contents_from_block(
-                            block,
+                            block, # type: ignore
                             phraser=phraser,
                             kit=kit
                         )
                     phrases_result.append(phrase)
                     logger.debug(
                         f"{kit} {block_type} 문구 생성 "
-                        f"(id_ref={block.id_ref}, nickname={block.nickname})"
                     )
 
                 if blocks:
@@ -511,5 +540,39 @@ class NFSReportWriter:
             phrase_final = "\n".join(numbered_phrases) 
         return phrase_final
             
-            
+    def make_contents_profile_blocks(self, kit:Literal["STR", "STR20", "YSTR"]="STR") -> list:
+        def serialize_profile(profile:dict) -> list:
+            data_serialized = []
+            for marker in markers:
+                value = profile[marker]
+                if marker == 'AMEL':
+                    value = value.replace("-", "")
+                data_serialized.append(value)     
+            return data_serialized
+
+        logger.info(f"표에 넣을 프로필 데이터 생성 시작, kit = {kit}," )
+        markers = DICT_MARKERS[kit]
+        block_manager = self.blocks_manager["STR"] if kit in ["STR", "STR20"] else self.blocks_manager[kit]
+        blocks = block_manager.export_blocks(block_type='pair', reaction=False)
+        seriealized_blocks = []
+        for block in blocks:
+            data = []
+            if isinstance(block, PairedProfileBlock):
+                dict_profile1 = self._extract_profile_data(id_ref=block.first.id_ref, kit=kit) # type: ignore
+                dict_profile2 = self._extract_profile_data(id_ref=block.second.id_ref, kit=kit) # type: ignore
+                data.append(block.text_evidencenumber)               
+                data.append(block.first.text_evidencenumber)
+                data.extend(serialize_profile(dict_profile1))     
+                data.append(block.second.text_evidencenumber)
+                data.extend(serialize_profile(dict_profile2))
+            else:
+                dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit) # type: ignore
+                data.append(block.text_evidencenumber)
+                data.extend(serialize_profile(dict_profile))
+            logger.debug(f"개별 데이터 : {data}")
+            seriealized_blocks.append(data)
+        logger.debug(f"최종 데이터 : {seriealized_blocks}")
+        return seriealized_blocks
+
+
 
