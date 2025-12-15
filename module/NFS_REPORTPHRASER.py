@@ -83,7 +83,7 @@ def make_pharase_differential_extraction(text_evidence: str, phrase_nonsperm:str
     # phrase_nonsperm = re.sub(r'증\([^)]+\)호', '상피세포층', phrase_nonsperm)
     # phrase_sperm = re.sub(r'\([^)]*\)', '', phrase_sperm)
     # phrase_sperm = re.sub(r'증\([^)]+\)호', '정자층', phrase_sperm)
-    phrase = f"{phrase_pair}\r\n-{phrase_nonsperm}\r\n-{phrase_sperm}"
+    phrase = f"{phrase_pair}\r\n -1) {phrase_nonsperm}\n -2) {phrase_sperm}"
     return phrase
 
 def make_pharase_presume(text_evidence: str, phrase_detected:str, phrase_presumed:str) -> str:

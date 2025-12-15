@@ -10,7 +10,7 @@ import module.NFS_BLOCKMANAGER as NFS_BM
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.CRITICAL,
     format='[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s:%(lineno)d] - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -82,7 +82,7 @@ blocks_manager_ystr = NFS_BM.BlockProfileManager(
 )
 blocks_manager_ystr.generate_blocks()
 
-type_report = "deceased_only"
+type_report = "default"
 logger.info("NFSReportWriter 객체 생성")
 RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr, type_report=type_report)
 

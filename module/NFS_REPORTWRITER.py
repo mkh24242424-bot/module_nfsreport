@@ -310,7 +310,9 @@ class NFSReportWriter:
             blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
+                print(block_type)
                 blocks = [block for block in blocks_exported if block.type_block==block_type]
+                print(blocks)
                 if len(blocks)==0:
                     continue
                 phraser = kit_phrasers[block_type]
@@ -397,10 +399,11 @@ class NFSReportWriter:
             phrases_result.append(phrase_dbsearch)
 
         # 4. 최종 문구 결합
-        numbered_phrases = [
-            f"{idx}) {phrase}" 
-            for idx, phrase in enumerate(phrases_result, start=1)
-        ]
+        numbered_phrases = []
+        for idx, phrase in enumerate(phrases_result, start=1):
+            numbered_phrase = f"{idx}) {phrase}"
+            numbered_phrase = numbered_phrase.replace("-", f"{idx}-") #상피세포층, Y-STR 결과에서 -로 문단 구분 시 서브 번호 붙여주기.
+            numbered_phrases.append(numbered_phrase) 
         next_number = len(phrases_result) + 1
         phrase_final = "\n".join(numbered_phrases) + f"\n{next_number}) "  
 
