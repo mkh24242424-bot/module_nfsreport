@@ -45,7 +45,7 @@ pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
 logger.info("NFSReportInformation 객체 생성 (id_case=2025-C-6745)")
-info = NFS_RI.NFSReportInformation(id_case='2025-C-6698')
+info = NFS_RI.NFSReportInformation(id_case='2025-C-6745')
 
 logger.info("사건 정보 추출 시작")
 info.extract_caseinfo_from_df(df_caseinfo)

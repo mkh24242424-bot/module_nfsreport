@@ -164,7 +164,10 @@ class NFSReportWriter:
         try:
             if profile_manager is not None:
                 if id_ref in KEYWORDS_NOPROFILE:
-                    return profile_manager.generate_NoProfile(type_noprofile=id_ref, STR_20=flag_STR_20).export_to_str()
+                    noprofile = {}
+                    for marker in DICT_MARKERS[kit]:
+                        noprofile[marker]=id_ref
+                    return noprofile
                 else:
                     return profile_manager.generate_STRProfile(samplename=id_ref, STR_20=flag_STR_20).export_to_str() 
             else:
@@ -546,7 +549,10 @@ class NFSReportWriter:
             for marker in markers:
                 value = profile[marker]
                 if marker == 'AMEL':
-                    value = value.replace("-", "")
+                    if value=="X":
+                        value="XX"
+                    elif value=='X-Y':
+                        value="X-Y"
                 data_serialized.append(value)     
             return data_serialized
 
@@ -560,14 +566,16 @@ class NFSReportWriter:
             if isinstance(block, PairedProfileBlock):
                 dict_profile1 = self._extract_profile_data(id_ref=block.first.id_ref, kit=kit) # type: ignore
                 dict_profile2 = self._extract_profile_data(id_ref=block.second.id_ref, kit=kit) # type: ignore
-                data.append(block.text_evidencenumber)               
+                text_evidence = block.text_evidencenumber.replace(f"({block.type_block})", "") #타입 텍스트 지우기
+                data.append(text_evidence)               
                 data.append(block.first.text_evidencenumber)
                 data.extend(serialize_profile(dict_profile1))     
                 data.append(block.second.text_evidencenumber)
                 data.extend(serialize_profile(dict_profile2))
             else:
                 dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit) # type: ignore
-                data.append(block.text_evidencenumber)
+                
+                data.append(block.text_evidencenumber if block.nickname=="" else f"{block.text_evidencenumber}\r\n{block.nickname}")# type: ignore
                 data.extend(serialize_profile(dict_profile))
             logger.debug(f"개별 데이터 : {data}")
             seriealized_blocks.append(data)

@@ -72,10 +72,6 @@ class PairedProfileBlock(ProfileBlock):
     def indexes(self) -> list:
         return self.first.indexes
 
-    @property
-    def text_evidencenumber(self) -> str:
-        return self.first.text_evidencenumber
-
     def get_singles(self) -> Iterator[SingleProfileBlock]:
         yield self.first
         yield self.second
