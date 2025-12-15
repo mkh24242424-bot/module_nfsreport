@@ -22,43 +22,61 @@ class ProfileBlock(ABC):
 
 
 class SingleProfileBlock(ProfileBlock):
-    """단일 블록"""
-    def __init__(self, indexes: list, type_block: str,nickname: str, id_ref: str):
+    """단일 블록
+
+    Attributes:
+        indexes: 이 블록에 포함된 증거물들의 DataFrame index 리스트
+        type_block: 프로필 유형 (대조, 대조일치, 대표일치, ND, NC 등)
+        nickname: 대조 이름 (예: "피의자", "피해자")
+        id_ref: 참조 감정물번호
+        text_evidencenumber: 감정서에 표시될 증거물 텍스트 (예: "증1호~증3호")
+    """
+    def __init__(
+        self,
+        indexes: list,
+        type_block: str,
+        nickname: str,
+        id_ref: str,
+        text_evidencenumber: str = ""
+    ):
         self.indexes = indexes
         self.type_block = type_block
         self.nickname = nickname
         self.id_ref = id_ref
-    
+        self.text_evidencenumber = text_evidencenumber
+
     def get_singles(self) -> Iterator['SingleProfileBlock']:
         yield self
 
 
 class PairedProfileBlock(ProfileBlock):
-    """순서 있는 두 SingleBlock의 쌍"""
-    def __init__(self, first: SingleProfileBlock, second: SingleProfileBlock, type_block:str):
+    """순서 있는 두 SingleBlock의 쌍
+
+    DNA 감정에서 상피세포층/정자층, 추정형/검출형처럼 쌍으로 처리해야 하는 블록.
+    first와 second는 각각 독립적인 SingleProfileBlock이며,
+    indexes와 text_evidencenumber는 first의 값을 반환합니다.
+
+    Attributes:
+        first: 첫 번째 블록 (상피세포층, 추정형)
+        second: 두 번째 블록 (정자층, 검출형)
+        type_block: 페어 유형 키워드 (예: "상피세포층", "추정형")
+    """
+    def __init__(self, first: SingleProfileBlock, second: SingleProfileBlock, type_block: str):
         self.first = first
         self.second = second
         self.type_block = type_block
+
     @property
     def indexes(self) -> list:
         return self.first.indexes
-    
+
     @property
     def text_evidencenumber(self) -> str:
         return self.first.text_evidencenumber
-    
+
     def get_singles(self) -> Iterator[SingleProfileBlock]:
         yield self.first
         yield self.second
-
-
-# @dataclass
-# class BlockProfile:
-#     idx_first: str
-#     nickname: str
-#     text_table: str
-#     text_phrase: str
-#     id_ref: str
 
 
 class BlockProfileManager:
@@ -95,7 +113,12 @@ class BlockProfileManager:
         NFSReportWriter: 이 매니저를 사용하는 상위 감정서 작성 클래스
     """
 
-    def __init__(self, info_written: pd.DataFrame, kit: str = "STR"):
+    def __init__(
+        self,
+        info_written: pd.DataFrame,
+        kit: str = "STR",
+        evidence_text_generator: 'EvidenceTextGenerator | None' = None
+    ):
         """블록 프로필 매니저 초기화
 
         기재된 증거물 정보를 기반으로 프로필 블록을 관리하는 매니저를 초기화합니다.
@@ -104,6 +127,9 @@ class BlockProfileManager:
         Args:
             info_written: 기재된 증거물 정보 DataFrame (기재_여부 == "기재"로 필터링된 데이터)
             kit: 키트 종류. 기본값은 "STR"
+            evidence_text_generator: 증거물 텍스트 생성기 (의존성 주입).
+                None이면 기본 EvidenceTextGenerator를 생성합니다.
+                테스트 시 mock 객체를 주입할 수 있습니다.
 
         Raises:
             ValueError: kit이 "STR" 또는 "YSTR"이 아닌 경우
@@ -112,6 +138,10 @@ class BlockProfileManager:
             >>> info_written = df[df["기재_여부"] == "기재"]
             >>> manager = BlockProfileManager(info_written=info_written, kit="STR")
             >>> manager.generate_blocks()
+
+            # 의존성 주입 예시
+            >>> custom_generator = EvidenceTextGenerator(info_written)
+            >>> manager = BlockProfileManager(info_written, kit="STR", evidence_text_generator=custom_generator)
         """
         self.info_written = info_written
         logger.debug(f"BlockProfileManager 초기화 시작 (kit={kit}, 증거물 수={len(info_written)})")
@@ -154,8 +184,9 @@ class BlockProfileManager:
         )
 
         # 5. 블록 저장소 및 텍스트 생성기 초기화
-        self.blocks:list[SingleProfileBlock] = []
-        self.evidence_text_generator = EvidenceTextGenerator(info_written.copy())
+        self.blocks: list[SingleProfileBlock] = []
+        # 의존성 주입: 외부에서 주입된 생성기가 있으면 사용, 없으면 기본 생성
+        self.evidence_text_generator = evidence_text_generator or EvidenceTextGenerator(info_written.copy())
         self.generate_blocks()
         logger.debug("BlockProfileManager 초기화 완료")
     
