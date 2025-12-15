@@ -506,21 +506,22 @@ class BlockProfileManager:
                                                          nickname=block.nickname, 
                                                          id_ref=block.id_ref)
                     nonsingle_blocks.append(nonsingle_block)
-                profileblock_single = SingleProfileBlock(indexes=idxs_single,
-                                                         type_block=block.type_block,
-                                                         nickname=block.nickname,
-                                                         id_ref=block.id_ref)
-                single_blocks.append(profileblock_single)
+                if idxs_single:  # 빈 블록 생성 방지
+                    profileblock_single = SingleProfileBlock(indexes=idxs_single,
+                                                             type_block=block.type_block,
+                                                             nickname=block.nickname,
+                                                             id_ref=block.id_ref)
+                    single_blocks.append(profileblock_single)
             # PAIRED BLOCK 생성
             # 1. 따로 따로 생성
             list_type_paired = []
             for first_block in nonsingle_blocks:
                 for keyword_first in PAIR_TEXTEVIDENCE.keys():
-                     textevidence_first = str(self.info_written.loc[first_block.indexes, self.COL_TEXT_EVIDENCE])#iloc를 써야 할것 같은데?
-                     textevidence = re.sub(r'\([^)]*\)', '', textevidence_first) #괄호 제거
+                     textevidence_first = self.info_written.loc[first_block.indexes[0], self.COL_TEXT_EVIDENCE]
+                     textevidence = re.sub(r'\([^)]*\)', '', textevidence_first)  # 괄호 제거
                      if keyword_first in textevidence_first:
                          for second_block in nonsingle_blocks:
-                             textevidence_second = str(self.info_written.loc[second_block.indexes, self.COL_TEXT_EVIDENCE])
+                             textevidence_second = self.info_written.loc[second_block.indexes[0], self.COL_TEXT_EVIDENCE]
                              text_expected = textevidence + PAIR_TEXTEVIDENCE[keyword_first]
                              if textevidence_second == text_expected:
                                  paired_block = PairedProfileBlock(first=first_block, second=second_block, type_block=keyword_first)
@@ -537,9 +538,26 @@ class BlockProfileManager:
                 for idx in idx_paired_blocks:
                     indexes_first.extend(paired_blocks[idx].first.indexes)
                     indexes_second.extend(paired_blocks[idx].second.indexes)
-                paired_blocks[idx_paired_blocks[0]].first.indexes = indexes_first
-                paired_blocks[idx_paired_blocks[0]].second.indexes = indexes_second
-                combined_paired_blocks.append(paired_blocks[idx_paired_blocks[0]])
+                # 원본 수정 대신 새 객체 생성
+                base_block = paired_blocks[idx_paired_blocks[0]]
+                combined_first = SingleProfileBlock(
+                    indexes=indexes_first,
+                    type_block=base_block.first.type_block,
+                    nickname=base_block.first.nickname,
+                    id_ref=base_block.first.id_ref
+                )
+                combined_second = SingleProfileBlock(
+                    indexes=indexes_second,
+                    type_block=base_block.second.type_block,
+                    nickname=base_block.second.nickname,
+                    id_ref=base_block.second.id_ref
+                )
+                combined_block = PairedProfileBlock(
+                    first=combined_first,
+                    second=combined_second,
+                    type_block=base_block.type_block
+                )
+                combined_paired_blocks.append(combined_block)
             blocks = single_blocks + combined_paired_blocks
         else:
             blocks = self.blocks
