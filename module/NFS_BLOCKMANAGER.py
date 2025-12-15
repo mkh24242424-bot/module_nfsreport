@@ -38,7 +38,7 @@ class PairedProfileBlock(ProfileBlock):
     def __init__(self, first: SingleProfileBlock, second: SingleProfileBlock, type_block:str):
         self.first = first
         self.second = second
-        type_block = type_block
+        self.type_block = type_block
     @property
     def indexes(self) -> list:
         return self.first.indexes
