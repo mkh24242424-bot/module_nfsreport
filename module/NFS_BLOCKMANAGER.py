@@ -522,7 +522,7 @@ class BlockProfileManager:
                      if keyword_first in textevidence_first:
                          for second_block in nonsingle_blocks:
                              textevidence_second = self.info_written.loc[second_block.indexes[0], self.COL_TEXT_EVIDENCE]
-                             text_expected = textevidence + PAIR_TEXTEVIDENCE[keyword_first]
+                             text_expected = f"{textevidence}({PAIR_TEXTEVIDENCE[keyword_first]})"
                              if textevidence_second == text_expected:
                                  paired_block = PairedProfileBlock(first=first_block, second=second_block, type_block=keyword_first)
                                  paired_blocks.append(paired_block)
