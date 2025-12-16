@@ -12,12 +12,13 @@ class NFS_HWPFormatter:
         self.hwp_control.RegisterModule("FilePathCheckDLL", "FilePathCheckerModuleExample")
         self.hwp_control.XHwpWindows.Item(0).Visible = True
         self.path_base = path_base
+        self.path_report = ""
     
     def create_new_report(self, code_case: str, type_report: str="DEFAULT", ):
         path_template = f"{self.path_base}{ PATH_HWP_TEMPLATE[type_report]}"
-        path_report = f"{self.path_base}/report/{code_case}.hwp"
-        shutil.copyfile(path_template, path_report)
-        self.hwp_control.Open(path_report)  # 문서 경로 지정
+        self.path_report = f"{self.path_base}/report/{code_case}.hwp"
+        shutil.copyfile(path_template, self.path_report)
+        self.hwp_control.Open(self.path_report)  # 문서 경로 지정
         self.hwp_control.Run("FrameFullScreen")  # 한글을 전체화면으로 만듭니다.
         self.hwp_control.Run("MoveDocBegin")
         
@@ -232,8 +233,9 @@ class NFS_HWPFormatter:
                 self.hwp_control.Run("MoveLeft")
 
 
-    def save_and_quit(self, save_path: str):
-        self.hwp_control.SaveAs(save_path)
-        self.hwp_control.Quit()
+    def save_and_move_to_firstpage(self):
+        self.hwp_control.Run("MovePageBegin")
+        self.hwp_control.SaveAs(self.path_report)
+
 
 

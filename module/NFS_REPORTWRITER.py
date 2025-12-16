@@ -938,10 +938,6 @@ class NFSReportWriter:
         if has_mixture:
             notes.append("/ : 혼합 디엔에이형.")
 
-        # 미세변이 노트 수집 (순서 유지)
-        for meta in metas:
-            notes.extend(meta.microvariant_notes)
-
         # NC/ND 플래그
         has_nd = any(m.has_nd for m in metas)
         has_nc = any(m.has_nc for m in metas)
@@ -950,5 +946,9 @@ class NFSReportWriter:
             notes.append("ND : 디엔에이형이 검출되지 않음.")
         if has_nc:
             notes.append("NC : 디엔에이형을 결정할 수 없음.")
+
+        # 미세변이 노트 수집 (순서 유지)
+        for meta in metas:
+            notes.extend(meta.microvariant_notes)
 
         return "\r\n".join(notes) if notes else ""

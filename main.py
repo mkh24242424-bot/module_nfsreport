@@ -139,6 +139,8 @@ paths_img = ["C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-
              "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-4.JPG",
              "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-5.JPG",]
 hwp_formatter.insert_pictures(paths_img=paths_img)
+
+hwp_formatter.save_and_move_to_firstpage()
 logger.info("========== 프로그램 종료 ==========")
 
 
