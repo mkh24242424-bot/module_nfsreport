@@ -6,7 +6,8 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
-        KEYWORDS_NOPROFILE
+        KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
+        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS
 from .constants_strprofile import DICT_MARKERS
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
@@ -582,5 +583,256 @@ class NFSReportWriter:
         logger.debug(f"최종 데이터 : {seriealized_blocks}")
         return seriealized_blocks
 
+    def _is_special_case_allele(self, marker: str, allele: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
+        """비정형 좌위값 중 허용되는 특수 케이스인지 여부를 체크합니다.
+
+        특수 케이스 상수는 constants_reportwriter.py에서 정의됩니다:
+        - MICROVARIANT_ALLOWED_DECIMALS: 모든 좌위에서 허용되는 소수점
+        - MICROVARIANT_SPECIAL_ALLELES: 좌위별 허용되는 특수 allele 값
+        - MICROVARIANT_SPECIAL_DECIMALS: 좌위별 허용되는 소수점 자릿수
+
+        Args:
+            marker: 좌위명
+            allele: 좌위값 (소수점 포함 문자열)
+            kit: 키트 종류
+
+        Returns:
+            bool: 특수 케이스 여부 (True면 미세변이 처리 불필요)
+        """
+        # Y-STR 마커는 모두 특수 케이스로 처리
+        if kit == "YSTR":
+            return True
+
+        if "." not in allele:
+            return True
+
+        decimal_place = allele.split(".")[1]
+
+        # 일반적으로 허용되는 소수점 자릿수 체크
+        if decimal_place in MICROVARIANT_ALLOWED_DECIMALS:
+            return True
+
+        # 좌위별 특수 allele 값 체크
+        if marker in MICROVARIANT_SPECIAL_ALLELES:
+            if allele in MICROVARIANT_SPECIAL_ALLELES[marker]:
+                return True
+
+        # 좌위별 특수 소수점 자릿수 체크
+        if marker in MICROVARIANT_SPECIAL_DECIMALS:
+            if decimal_place in MICROVARIANT_SPECIAL_DECIMALS[marker]:
+                return True
+
+        return False
+
+    def _process_allele_value(
+        self,
+        marker: str,
+        value: str,
+        kit: Literal["STR", "STR20", "YSTR"],
+        microvariant_count: int
+    ) -> tuple[str, int, list[str]]:
+        """단일 마커 값을 처리하고 미세변이를 수정합니다.
+
+        Args:
+            marker: 좌위명
+            value: 마커 값 (예: "15-16", "12/13/14", "NC")
+            kit: 키트 종류
+            microvariant_count: 현재까지의 미세변이 카운트
+
+        Returns:
+            tuple[str, int, list[str]]: (수정된 값, 갱신된 미세변이 카운트, 특이사항 리스트)
+        """
+        # NC/ND는 그대로 반환
+        if value in KEYWORDS_NOPROFILE:
+            return value, microvariant_count, []
+
+        # 구분자 결정 (혼합: /, 비혼합: -)
+        if "/" in value:
+            separator = "/"
+        elif "-" in value:
+            separator = "-"
+        else:
+            # 단일 값
+            separator = None
+
+        if separator:
+            alleles = value.split(separator)
+        else:
+            alleles = [value]
+
+        processed_alleles = []
+        etc_notes = []
+
+        for allele in alleles:
+            # OL(Off-ladder) 값은 건너뜀
+            if "OL" in allele:
+                continue
+
+            modified_allele = allele
+
+            # 소수점이 있는 경우 미세변이 체크
+            if "." in allele:
+                if not self._is_special_case_allele(marker, allele, kit):
+                    microvariant_count += 1
+                    decimal_place = allele.split(".")[1]
+
+                    # .1은 내림, 그 외는 올림
+                    if decimal_place == "1":
+                        modified_allele = str(int(float(allele)))
+                    else:
+                        modified_allele = str(int(float(allele) + 1))
+
+                    # * 표시 추가
+                    modified_allele = modified_allele + "*" * microvariant_count
+                    etc_notes.append(
+                        f"{'*' * microvariant_count} : 미세변이 (검출값 : {allele})"
+                    )
+
+            processed_alleles.append(modified_allele)
+
+        # 값 재조합
+        if separator and processed_alleles:
+            result_value = separator.join(processed_alleles)
+        elif processed_alleles:
+            result_value = processed_alleles[0]
+        else:
+            result_value = value
+
+        return result_value, microvariant_count, etc_notes
+
+    def process_serialized_blocks(
+        self,
+        serialized_blocks: list[list[str]],
+        kit: Literal["STR", "STR20", "YSTR"] = "STR"
+    ) -> tuple[list[list[str]], str]:
+        """serialized_blocks에서 특수 케이스를 발견하여 수정하고 특이사항을 정리합니다.
+
+        make_contents_profile_blocks의 반환값을 입력받아 미세변이, NC/ND 등의
+        특수 케이스를 처리하고 발견된 예외사항들을 문자열로 정리합니다.
+
+        Args:
+            serialized_blocks: make_contents_profile_blocks의 반환값
+            kit: 키트 종류 ("STR", "STR20", "YSTR")
+
+        Returns:
+            tuple[list[list[str]], str]: (수정된 블록 리스트, 특이사항 문자열)
+
+        Examples:
+            >>> writer = NFSReportWriter(...)
+            >>> blocks = writer.make_contents_profile_blocks(kit="STR")
+            >>> processed_blocks, notes = writer.process_serialized_blocks(blocks, kit="STR")
+        """
+        logger.info(f"serialized_blocks 특수 케이스 처리 시작, kit={kit}")
+
+        markers = DICT_MARKERS[kit]
+        num_markers = len(markers)
+
+        processed_blocks = []
+        all_etc_notes = []
+        flag_NC = False
+        flag_ND = False
+        flag_mixture = False
+        microvariant_count = 0
+
+        for block in serialized_blocks:
+            processed_block = []
+
+            # 블록 타입 판별: 페어 블록은 길이가 1 + 1 + markers + 1 + markers
+            # 단일 블록은 길이가 1 + markers
+            is_paired = len(block) > (1 + num_markers)
+
+            if is_paired:
+                # 페어 블록 처리
+                # [전체번호, 첫번째번호, m1...mN, 두번째번호, m1...mN]
+                processed_block.append(block[0])  # 전체 증거물 번호
+                processed_block.append(block[1])  # 첫번째 프로필 증거물 번호
+
+                # 첫번째 프로필 마커 값들 (인덱스 2 ~ 2+num_markers-1)
+                for i, marker in enumerate(markers):
+                    value = block[2 + i]
+
+                    # NC/ND 플래그 체크
+                    if value == "NC":
+                        flag_NC = True
+                    elif value == "ND":
+                        flag_ND = True
+
+                    # 혼합 프로필 체크
+                    if "/" in value:
+                        flag_mixture = True
+
+                    processed_value, microvariant_count, notes = self._process_allele_value(
+                        marker, value, kit, microvariant_count
+                    )
+                    processed_block.append(processed_value)
+                    all_etc_notes.extend(notes)
+
+                # 두번째 프로필 증거물 번호
+                second_evidence_idx = 2 + num_markers
+                processed_block.append(block[second_evidence_idx])
+
+                # 두번째 프로필 마커 값들
+                for i, marker in enumerate(markers):
+                    value = block[second_evidence_idx + 1 + i]
+
+                    if value == "NC":
+                        flag_NC = True
+                    elif value == "ND":
+                        flag_ND = True
+
+                    if "/" in value:
+                        flag_mixture = True
+
+                    processed_value, microvariant_count, notes = self._process_allele_value(
+                        marker, value, kit, microvariant_count
+                    )
+                    processed_block.append(processed_value)
+                    all_etc_notes.extend(notes)
+            else:
+                # 단일 블록 처리
+                # [증거물번호+닉네임, m1, m2, ..., mN]
+                processed_block.append(block[0])  # 증거물 번호 (+ 닉네임)
+
+                for i, marker in enumerate(markers):
+                    value = block[1 + i]
+
+                    if value == "NC":
+                        flag_NC = True
+                    elif value == "ND":
+                        flag_ND = True
+
+                    if "/" in value:
+                        flag_mixture = True
+
+                    processed_value, microvariant_count, notes = self._process_allele_value(
+                        marker, value, kit, microvariant_count
+                    )
+                    processed_block.append(processed_value)
+                    all_etc_notes.extend(notes)
+
+            processed_blocks.append(processed_block)
+
+        # 특이사항 문자열 조합
+        final_notes = []
+
+        if flag_mixture:
+            final_notes.append("/ : 혼합 디엔에이형.")
+
+        # 미세변이 노트 추가
+        final_notes.extend(all_etc_notes)
+
+        if flag_ND:
+            final_notes.append("ND : 디엔에이형이 검출되지 않음.")
+
+        if flag_NC:
+            final_notes.append("NC : 디엔에이형을 결정할 수 없음.")
+
+        # 단락 나누기로 조합
+        notes_string = "\n".join(final_notes) if final_notes else ""
+
+        logger.debug(f"처리 완료 - 미세변이: {microvariant_count}개, NC: {flag_NC}, ND: {flag_ND}, 혼합: {flag_mixture}")
+        logger.debug(f"특이사항: {notes_string}")
+
+        return processed_blocks, notes_string
 
 
