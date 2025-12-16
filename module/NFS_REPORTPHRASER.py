@@ -83,7 +83,7 @@ def make_pharase_differential_extraction(text_evidence: str, phrase_nonsperm:str
     # phrase_nonsperm = re.sub(r'증\([^)]+\)호', '상피세포층', phrase_nonsperm)
     # phrase_sperm = re.sub(r'\([^)]*\)', '', phrase_sperm)
     # phrase_sperm = re.sub(r'증\([^)]+\)호', '정자층', phrase_sperm)
-    phrase = f"{phrase_pair}\r\n -1) {phrase_nonsperm}\n -2) {phrase_sperm}"
+    phrase = f"{phrase_pair}\r\n @1) {phrase_nonsperm}\n @2) {phrase_sperm}"
     return phrase
 
 def make_pharase_presume(text_evidence: str, phrase_detected:str, phrase_presumed:str) -> str:
@@ -140,7 +140,7 @@ def make_phrase_nc(info: Properties_Phrase) -> str:
 
 
 def make_phrase_nd(info: Properties_Phrase) -> str:
-    logger.debug("ND 문구 생성")
+    logger.debug("ND 문구 생성: " + info.text_evidence)
     phrase = f"{info.text_evidence}에서 디엔에이형이 검출되지 않음.\r\n"
     return phrase
 

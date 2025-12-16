@@ -200,10 +200,6 @@ class NFSReportWriter:
                 f"빈 값 반환"
             )
             return {}   
-
-  
-
-        
         return []
     
     
@@ -249,7 +245,7 @@ class NFSReportWriter:
         # 1. 성별 및 우도비 
         gender = self._extract_gender(block.id_ref, kit)
         lr = self._calculate_likelihood_ratio(block.id_ref, kit)
-     
+        logger.debug(f"블록의 text {block.text_evidencenumber}")
         # 2. Properties_Phrase 객체 생성
         properties = NFS_RP.Properties_Phrase(
             gender=gender,
@@ -291,7 +287,6 @@ class NFSReportWriter:
         first_phrase = self._make_contents_from_block(block.first, phraser=phrasers[block.first.type_block], kit=kit)
         second_phrase = self._make_contents_from_block(block.second, phraser=phrasers[block.second.type_block], kit=kit)
         phrase = phraser(text_evidence, first_phrase, second_phrase)
-
         logger.debug(f"결과 문구 생성 완료 (길이={len(phrase)})")
         return phrase
 
@@ -419,7 +414,7 @@ class NFSReportWriter:
         numbered_phrases = []
         for idx, phrase in enumerate(phrases_result, start=1):
             numbered_phrase = f"{idx}) {phrase}"
-            numbered_phrase = numbered_phrase.replace("-", f"{idx}-") #상피세포층, Y-STR 결과에서 -로 문단 구분 시 서브 번호 붙여주기.
+            numbered_phrase = numbered_phrase.replace("@", f"{idx}-") #상피세포층, Y-STR 결과에서 -로 문단 구분 시 서브 번호 붙여주기.
             numbered_phrases.append(numbered_phrase) 
         next_number = len(phrases_result) + 1
         phrase_final = "\n".join(numbered_phrases) + f"\n{next_number}) "  
