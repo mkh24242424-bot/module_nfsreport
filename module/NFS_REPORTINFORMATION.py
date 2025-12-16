@@ -195,11 +195,12 @@ class NFSReportInformation:
                 f"증거물 정보 추출 실패: 필수 컬럼 누락 - {missing_columns}"
             )
 
-        # 3. 사건번호로 필터링
+        # 3. 사건번호로 필터링 
         try:
             case_mask = df_evidenceinfo['접수번호'] == self.id_case
             filtered_df = df_evidenceinfo.loc[case_mask, required_columns]
-
+            # 3.5 필요 전처리: nan null 값을 빈칸으로 처리.
+            filtered_df = filtered_df.fillna("") 
             # 4. 인덱스 재설정 및 저장
             self.evidenceinfo = filtered_df.reset_index(drop=True)
 

@@ -232,10 +232,10 @@ class BlockProfileManager:
         self.blocks.extend(self._generate_blocks_ref())
         logger.debug(f"대조 블록 생성 완료")
 
-        self.blocks.extend(self._generate_blocks_match(type_profile='대조일치'))
+        self.blocks.extend(self._generate_blocks_match(type_match='대조일치'))
         logger.debug(f"대조일치 블록 생성 완료")
 
-        self.blocks.extend(self._generate_blocks_match(type_profile='대표일치'))
+        self.blocks.extend(self._generate_blocks_match(type_match='대표일치'))
         logger.debug(f"대표일치 블록 생성 완료")
 
         self.blocks.extend(self._generate_blocks_noprofile(type_profile='ND'))
@@ -356,7 +356,7 @@ class BlockProfileManager:
     
     def _generate_blocks_match(
         self,
-        type_profile: Literal["대표일치", "대조일치"]
+        type_match: Literal["대표일치", "대조일치"]
     ) -> list[SingleProfileBlock]:
         """일치 블록 생성 (대조일치 또는 대표일치)
 
@@ -383,11 +383,11 @@ class BlockProfileManager:
         See Also:
             _generate_block: 단일 블록 생성 헬퍼
         """
-        logger.debug(f"{type_profile}일치 블록 생성 시작")
-
+        logger.debug(f"{type_match} 블록 생성 시작")
+        type_profile = type_match.replace("일치", "")
         # 1. 프로필 유형 존재 여부 확인
         if type_profile not in self.codes_groupby_type:
-            logger.debug(f"{type_profile} 유형이 없음 (빈 리스트 반환)")
+            logger.debug(f"{type_match} 유형이 없음 (빈 리스트 반환)")
             return []
 
         # 2. 각 코드별 일치 블록 생성
@@ -411,24 +411,24 @@ class BlockProfileManager:
                 logger.warning(f"매치되는 일반 프로필이 없습니다 (code={code})")
 
             # 2-3. 대표일치의 경우 대표 프로필 자체도 포함
-            if type_profile == "대표일치":
+            if type_match == "대표일치":
                 info_match = pd.concat([info_ref, info_match]).sort_values(by='index')
                 logger.debug(f"대표 프로필 포함 (총 행 수={len(info_match)})")
             
             # 2-4. 블록 생성
             if len(info_match) == 0:
-                logger.info(f"{type_profile}일치 프로필이 없어 블록 생성하지 않음 (code={code})")
+                logger.info(f"{type_match} 프로필이 없어 블록 생성하지 않음 (code={code})")
                 continue
             block = self._generate_block(
                 info=info_match,
                 id_ref=id_ref,
                 nickname_ref=nickname_ref,
-                type_block=type_profile
+                type_block=type_match
             )
             blocks.append(block)
-            logger.debug(f"{type_profile}일치 블록 생성 (code={code}, id_ref={id_ref})")
+            logger.debug(f"{type_match} 블록 생성 (code={code}, id_ref={id_ref})")
 
-        logger.debug(f"{type_profile}일치 블록 생성 완료 (총 {len(blocks)}개)")
+        logger.debug(f"{type_match} 블록 생성 완료 (총 {len(blocks)}개)")
         return blocks
     
     def _generate_blocks_noprofile(
