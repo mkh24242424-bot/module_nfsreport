@@ -68,9 +68,30 @@ class NFS_HWPFormatter:
             self.hwp_control.HAction.Run("TableMergeCell")
         
         def input_text(text):
-            self.hwp_control.HAction.GetDefault("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
-            self.hwp_control.HParameterSet.HInsertText.Text = text
-            self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+            if '*' not in text:
+                self.hwp_control.HAction.GetDefault("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+                self.hwp_control.HParameterSet.HInsertText.Text = text
+                self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+            else:
+                parts = text.split('*')
+                for i, part in enumerate(parts):
+                    if part:  # 일반 텍스트 입력
+                        self.hwp_control.HAction.GetDefault("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+                        self.hwp_control.HParameterSet.HInsertText.Text = part
+                        self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+                    if i < len(parts) - 1:  # * 입력 (위첨자)
+                        # 위첨자 설정
+                        self.hwp_control.HAction.GetDefault("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
+                        self.hwp_control.HParameterSet.HCharShape.SuperScript = 1
+                        self.hwp_control.HAction.Execute("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
+                        # * 입력
+                        self.hwp_control.HAction.GetDefault("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+                        self.hwp_control.HParameterSet.HInsertText.Text = '*'
+                        self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
+                        # 위첨자 해제
+                        self.hwp_control.HAction.GetDefault("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
+                        self.hwp_control.HParameterSet.HCharShape.SuperScript = 0
+                        self.hwp_control.HAction.Execute("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
         
         def input_list_text_vertically(list_text):
             for value in list_text:
