@@ -590,7 +590,7 @@ class NFSReportWriter:
 
         serialized_blocks = []
         all_metas: list[ProfileMeta] = []
-        microvariant_count = 0
+        microvariant_map: dict[str, int] = {}
 
         for block in blocks:
             data = []
@@ -601,14 +601,14 @@ class NFSReportWriter:
                 dict_profile2 = self._extract_profile_data(id_ref=block.second.id_ref, kit=kit)
 
                 # 첫번째 프로필 처리
-                processed1, meta1, microvariant_count = self._process_profile(
-                    dict_profile1, kit, microvariant_count
+                processed1, meta1, microvariant_map = self._process_profile(
+                    dict_profile1, kit, microvariant_map
                 )
                 all_metas.append(meta1)
 
                 # 두번째 프로필 처리
-                processed2, meta2, microvariant_count = self._process_profile(
-                    dict_profile2, kit, microvariant_count
+                processed2, meta2, microvariant_map = self._process_profile(
+                    dict_profile2, kit, microvariant_map
                 )
                 all_metas.append(meta2)
 
@@ -624,8 +624,8 @@ class NFSReportWriter:
                 dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit) # type: ignore
 
                 # 프로필 처리
-                processed, meta, microvariant_count = self._process_profile(
-                    dict_profile, kit, microvariant_count
+                processed, meta, microvariant_map = self._process_profile(
+                    dict_profile, kit, microvariant_map
                 )
                 all_metas.append(meta)
 
@@ -695,26 +695,26 @@ class NFSReportWriter:
         marker: str,
         value: str,
         kit: Literal["STR", "STR20", "YSTR"],
-        microvariant_count: int
-    ) -> tuple[str, int, list[str]]:
+        microvariant_map: dict[str, int]
+    ) -> tuple[str, dict[str, int], list[str]]:
         """단일 마커 값을 처리하고 미세변이를 수정합니다.
 
         Args:
             marker: 좌위명
             value: 마커 값 (예: "15-16", "12/13/14", "NC")
             kit: 키트 종류
-            microvariant_count: 현재까지의 미세변이 카운트
+            microvariant_map: 미세변이 값 -> 별 개수 매핑 (같은 값은 같은 별 개수)
 
         Returns:
-            tuple[str, int, list[str]]: (수정된 값, 갱신된 미세변이 카운트, 특이사항 리스트)
+            tuple[str, dict[str, int], list[str]]: (수정된 값, 갱신된 미세변이 맵, 특이사항 리스트)
         """
         # NC/ND는 그대로 반환
         if value in KEYWORDS_NOPROFILE:
-            return value, microvariant_count, []
+            return value, microvariant_map, []
 
         # AMEL은 혼합 여부에 따라 후처리되므로 그대로 반환
         if marker == "AMEL":
-            return value, microvariant_count, []
+            return value, microvariant_map, []
 
         # 구분자 설정
         if "-" in value:
@@ -741,7 +741,17 @@ class NFSReportWriter:
             # 소수점이 있는 경우 미세변이 체크
             if "." in allele:
                 if not self._is_special_case_allele(marker, allele, kit):
-                    microvariant_count += 1
+                    # 같은 미세변이 값이 이미 있으면 기존 별 개수 사용
+                    if allele in microvariant_map:
+                        star_count = microvariant_map[allele]
+                    else:
+                        # 새로운 미세변이 → 새 별 개수 할당
+                        star_count = len(microvariant_map) + 1
+                        microvariant_map[allele] = star_count
+                        etc_notes.append(
+                            f"{'*' * star_count} : 미세변이 (검출값 : {allele})"
+                        )
+
                     decimal_place = allele.split(".")[1]
 
                     # .1은 내림, 그 외는 올림
@@ -751,10 +761,7 @@ class NFSReportWriter:
                         modified_allele = str(int(float(allele) + 1))
 
                     # * 표시 추가
-                    modified_allele = modified_allele + "*" * microvariant_count
-                    etc_notes.append(
-                        f"{'*' * microvariant_count} : 미세변이 (검출값 : {allele})"
-                    )
+                    modified_allele = modified_allele + "*" * star_count
 
             processed_alleles.append(modified_allele)
 
@@ -766,7 +773,7 @@ class NFSReportWriter:
         else:
             result_value = value
 
-        return result_value, microvariant_count, etc_notes
+        return result_value, microvariant_map, etc_notes
 
     def _process_amel_value(self, value: str, is_mixture: bool) -> str:
         """AMEL 값을 혼합 여부에 따라 처리합니다.
@@ -829,8 +836,8 @@ class NFSReportWriter:
         self,
         profile: dict[str, str],
         kit: Literal["STR", "STR20", "YSTR"],
-        microvariant_count: int = 0
-    ) -> tuple[dict[str, str], ProfileMeta, int]:
+        microvariant_map: dict[str, int] | None = None
+    ) -> tuple[dict[str, str], ProfileMeta, dict[str, int]]:
         """dict 형태의 프로필에서 특수 케이스를 처리합니다.
 
         처리 항목:
@@ -842,14 +849,17 @@ class NFSReportWriter:
         Args:
             profile: {marker: value} 형태의 프로필 딕셔너리
             kit: 키트 종류
-            microvariant_count: 이전까지의 미세변이 카운트 (연속 처리용)
+            microvariant_map: 미세변이 값 -> 별 개수 매핑 (같은 값은 같은 별 개수)
 
         Returns:
-            tuple[dict[str, str], ProfileMeta, int]:
+            tuple[dict[str, str], ProfileMeta, dict[str, int]]:
                 - 처리된 프로필 딕셔너리
                 - 메타데이터 (is_mixture, has_nc, has_nd, microvariant_notes)
-                - 갱신된 미세변이 카운트
+                - 갱신된 미세변이 맵
         """
+        if microvariant_map is None:
+            microvariant_map = {}
+
         markers = DICT_MARKERS[kit]
         processed_profile = {}
         meta = ProfileMeta()
@@ -873,8 +883,8 @@ class NFSReportWriter:
             if marker == "AMEL" or value in KEYWORDS_NOPROFILE:
                 processed_profile[marker] = value
             else:
-                processed_value, microvariant_count, notes = self._process_allele_value(
-                    marker, value, kit, microvariant_count
+                processed_value, microvariant_map, notes = self._process_allele_value(
+                    marker, value, kit, microvariant_map
                 )
                 processed_profile[marker] = processed_value
                 meta.microvariant_notes.extend(notes)
@@ -890,7 +900,7 @@ class NFSReportWriter:
             elif meta.is_mixture and value not in KEYWORDS_NOPROFILE:
                 processed_profile[marker] = value.replace("-", "/")
 
-        return processed_profile, meta, microvariant_count
+        return processed_profile, meta, microvariant_map
 
     def _serialize_profile(
         self,
