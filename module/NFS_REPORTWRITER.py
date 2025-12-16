@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Callable
 from . import NFS_REPORTINFORMATION as NFS_RI
 from . import NFS_REPORTPHRASER as NFS_RP
@@ -7,11 +8,28 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
         KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
-        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS
-from .constants_strprofile import DICT_MARKERS
+        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS, LIMIT_ALLELE_BY_KIT
+from .constants_strprofile import DICT_MARKERS, TA_THRESHOLD
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProfileMeta:
+    """프로필 처리 중 수집되는 메타데이터
+
+    Attributes:
+        is_mixture: 혼합 프로필 여부
+        has_nc: NC 값 포함 여부
+        has_nd: ND 값 포함 여부
+        microvariant_notes: 미세변이 특이사항 리스트
+    """
+    is_mixture: bool = False
+    has_nc: bool = False
+    has_nd: bool = False
+    microvariant_notes: list[str] = field(default_factory=list)
+
 
 class NFSReportWriter:
     """NFS 감정서 작성 클래스
@@ -553,44 +571,90 @@ class NFSReportWriter:
             phrase_final = "\n".join(numbered_phrases) 
         return phrase_final
             
-    def make_contents_profile_blocks(self, kit:Literal["STR", "STR20", "YSTR"]="STR") -> list:
-        def serialize_profile(profile:dict) -> list:
-            data_serialized = []
-            for marker in markers:
-                value = profile[marker]
-                if marker == 'AMEL':
-                    if value=="X":
-                        value="XX"
-                    elif value=='X-Y':
-                        value="X-Y"
-                data_serialized.append(value)     
-            return data_serialized
+    def make_contents_profile_blocks(
+        self,
+        kit: Literal["STR", "STR20", "YSTR"] = "STR"
+    ) -> tuple[list[list[str]], str]:
+        """프로필 데이터를 처리하고 직렬화하여 반환합니다.
 
-        logger.info(f"표에 넣을 프로필 데이터 생성 시작, kit = {kit}," )
+        블록 매니저에서 블록을 가져와서:
+        1. 프로필 데이터 추출
+        2. 특수 케이스 처리 (미세변이, AMEL, 혼합 등)
+        3. 직렬화
+        4. notes 문자열 생성
+
+        Args:
+            kit: 키트 종류 ("STR", "STR20", "YSTR")
+
+        Returns:
+            tuple[list[list[str]], str]: (직렬화된 블록 리스트, 특이사항 문자열)
+        """
+        logger.info(f"표에 넣을 프로필 데이터 생성 시작, kit={kit}")
+
         markers = DICT_MARKERS[kit]
         block_manager = self.blocks_manager["STR"] if kit in ["STR", "STR20"] else self.blocks_manager[kit]
         blocks = block_manager.export_blocks(block_type='pair', reaction=False)
-        seriealized_blocks = []
+
+        serialized_blocks = []
+        all_metas: list[ProfileMeta] = []
+        microvariant_count = 0
+
         for block in blocks:
             data = []
+
             if isinstance(block, PairedProfileBlock):
-                dict_profile1 = self._extract_profile_data(id_ref=block.first.id_ref, kit=kit) # type: ignore
-                dict_profile2 = self._extract_profile_data(id_ref=block.second.id_ref, kit=kit) # type: ignore
-                text_evidence = block.text_evidencenumber.replace(f"({block.type_block})", "") #타입 텍스트 지우기
-                data.append(text_evidence)               
+                # 페어 블록 처리
+                dict_profile1 = self._extract_profile_data(id_ref=block.first.id_ref, kit=kit)
+                dict_profile2 = self._extract_profile_data(id_ref=block.second.id_ref, kit=kit)
+
+                # 첫번째 프로필 처리
+                processed1, meta1, microvariant_count = self._process_profile(
+                    dict_profile1, kit, microvariant_count
+                )
+                all_metas.append(meta1)
+
+                # 두번째 프로필 처리
+                processed2, meta2, microvariant_count = self._process_profile(
+                    dict_profile2, kit, microvariant_count
+                )
+                all_metas.append(meta2)
+
+                # 직렬화
+                text_evidence = block.text_evidencenumber.replace(f"({block.type_block})", "")
+                data.append(text_evidence)
                 data.append(block.first.text_evidencenumber)
-                data.extend(serialize_profile(dict_profile1))     
+                data.extend(self._serialize_profile(processed1, markers))
                 data.append(block.second.text_evidencenumber)
-                data.extend(serialize_profile(dict_profile2))
+                data.extend(self._serialize_profile(processed2, markers))
             else:
-                dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit) # type: ignore
-                
-                data.append(block.text_evidencenumber if block.nickname=="" else f"{block.text_evidencenumber}\r\n{block.nickname}")# type: ignore
-                data.extend(serialize_profile(dict_profile))
-            logger.debug(f"개별 데이터 : {data}")
-            seriealized_blocks.append(data)
-        logger.debug(f"최종 데이터 : {seriealized_blocks}")
-        return seriealized_blocks
+                # 단일 블록 처리
+                dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit)
+
+                # 프로필 처리
+                processed, meta, microvariant_count = self._process_profile(
+                    dict_profile, kit, microvariant_count
+                )
+                all_metas.append(meta)
+
+                # 직렬화
+                evidence_text = (
+                    block.text_evidencenumber
+                    if block.nickname == ""
+                    else f"{block.text_evidencenumber}\r\n{block.nickname}"
+                )
+                data.append(evidence_text)
+                data.extend(self._serialize_profile(processed, markers))
+
+            logger.debug(f"개별 데이터: {data}")
+            serialized_blocks.append(data)
+
+        # notes 문자열 생성
+        notes_string = self._build_notes_string(all_metas)
+
+        logger.debug(f"최종 데이터: {serialized_blocks}")
+        logger.debug(f"특이사항: {notes_string}")
+
+        return serialized_blocks, notes_string
 
     def _is_special_case_allele(self, marker: str, allele: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
         """비정형 좌위값 중 허용되는 특수 케이스인지 여부를 체크합니다.
@@ -655,6 +719,10 @@ class NFSReportWriter:
         if value in KEYWORDS_NOPROFILE:
             return value, microvariant_count, []
 
+        # AMEL은 혼합 여부에 따라 후처리되므로 그대로 반환
+        if marker == "AMEL":
+            return value, microvariant_count, []
+
         # 구분자 결정 (혼합: /, 비혼합: -)
         if "/" in value:
             separator = "/"
@@ -709,139 +777,198 @@ class NFSReportWriter:
 
         return result_value, microvariant_count, etc_notes
 
-    def process_serialized_blocks(
-        self,
-        serialized_blocks: list[list[str]],
-        kit: Literal["STR", "STR20", "YSTR"] = "STR"
-    ) -> tuple[list[list[str]], str]:
-        """serialized_blocks에서 특수 케이스를 발견하여 수정하고 특이사항을 정리합니다.
+    def _process_amel_value(self, value: str, is_mixture: bool) -> str:
+        """AMEL 값을 혼합 여부에 따라 처리합니다.
 
-        make_contents_profile_blocks의 반환값을 입력받아 미세변이, NC/ND 등의
-        특수 케이스를 처리하고 발견된 예외사항들을 문자열로 정리합니다.
+        비혼합:
+            - "X-Y" → "XY"
+            - "X-X" → "XX"
+            - "X" → "XX"
+
+        혼합:
+            - "X-Y" → "X/Y"
+            - "X-X" → "X"
+            - "X" → "X"
 
         Args:
-            serialized_blocks: make_contents_profile_blocks의 반환값
-            kit: 키트 종류 ("STR", "STR20", "YSTR")
+            value: AMEL 마커 값
+            is_mixture: 해당 프로필의 혼합 여부
 
         Returns:
-            tuple[list[list[str]], str]: (수정된 블록 리스트, 특이사항 문자열)
-
-        Examples:
-            >>> writer = NFSReportWriter(...)
-            >>> blocks = writer.make_contents_profile_blocks(kit="STR")
-            >>> processed_blocks, notes = writer.process_serialized_blocks(blocks, kit="STR")
+            str: 처리된 AMEL 값
         """
-        logger.info(f"serialized_blocks 특수 케이스 처리 시작, kit={kit}")
+        if value in KEYWORDS_NOPROFILE:
+            return value
 
-        markers = DICT_MARKERS[kit]
-        num_markers = len(markers)
-
-        processed_blocks = []
-        all_etc_notes = []
-        flag_NC = False
-        flag_ND = False
-        flag_mixture = False
-        microvariant_count = 0
-
-        for block in serialized_blocks:
-            processed_block = []
-
-            # 블록 타입 판별: 페어 블록은 길이가 1 + 1 + markers + 1 + markers
-            # 단일 블록은 길이가 1 + markers
-            is_paired = len(block) > (1 + num_markers)
-
-            if is_paired:
-                # 페어 블록 처리
-                # [전체번호, 첫번째번호, m1...mN, 두번째번호, m1...mN]
-                processed_block.append(block[0])  # 전체 증거물 번호
-                processed_block.append(block[1])  # 첫번째 프로필 증거물 번호
-
-                # 첫번째 프로필 마커 값들 (인덱스 2 ~ 2+num_markers-1)
-                for i, marker in enumerate(markers):
-                    value = block[2 + i]
-
-                    # NC/ND 플래그 체크
-                    if value == "NC":
-                        flag_NC = True
-                    elif value == "ND":
-                        flag_ND = True
-
-                    # 혼합 프로필 체크
-                    if "/" in value:
-                        flag_mixture = True
-
-                    processed_value, microvariant_count, notes = self._process_allele_value(
-                        marker, value, kit, microvariant_count
-                    )
-                    processed_block.append(processed_value)
-                    all_etc_notes.extend(notes)
-
-                # 두번째 프로필 증거물 번호
-                second_evidence_idx = 2 + num_markers
-                processed_block.append(block[second_evidence_idx])
-
-                # 두번째 프로필 마커 값들
-                for i, marker in enumerate(markers):
-                    value = block[second_evidence_idx + 1 + i]
-
-                    if value == "NC":
-                        flag_NC = True
-                    elif value == "ND":
-                        flag_ND = True
-
-                    if "/" in value:
-                        flag_mixture = True
-
-                    processed_value, microvariant_count, notes = self._process_allele_value(
-                        marker, value, kit, microvariant_count
-                    )
-                    processed_block.append(processed_value)
-                    all_etc_notes.extend(notes)
+        if is_mixture:
+            # 혼합: homozygous는 단일 표현, heterozygous는 "/" 구분
+            if value in ("X-X", "X"):
+                return "X"
+            elif value == "X-Y":
+                return "X/Y"
             else:
-                # 단일 블록 처리
-                # [증거물번호+닉네임, m1, m2, ..., mN]
-                processed_block.append(block[0])  # 증거물 번호 (+ 닉네임)
+                # 기타 경우 (예: X-X-Y 등)
+                return value.replace("-", "/")
+        else:
+            # 비혼합: "-" 제거하여 붙임
+            if value == "X":
+                return "XX"
+            else:
+                return value.replace("-", "")
 
-                for i, marker in enumerate(markers):
-                    value = block[1 + i]
+    def _apply_mixture_formatting(
+        self,
+        processed_block: list[str],
+        marker_start_idx: int,
+        markers: list[str],
+        is_mixture: bool
+    ) -> None:
+        """프로필의 마커 값들에 혼합 여부에 따른 포맷팅을 적용합니다.
 
-                    if value == "NC":
-                        flag_NC = True
-                    elif value == "ND":
-                        flag_ND = True
+        - AMEL이 markers에 있으면 _process_amel_value로 처리
+        - 혼합이면 AMEL 제외한 나머지 마커들의 "-"를 "/"로 변경
 
-                    if "/" in value:
-                        flag_mixture = True
+        Args:
+            processed_block: 처리 중인 블록 리스트 (in-place 수정)
+            marker_start_idx: 마커 값들의 시작 인덱스
+            markers: 마커 이름 리스트
+            is_mixture: 혼합 프로필 여부
+        """
+        for i, marker in enumerate(markers):
+            idx = marker_start_idx + i
+            if marker == "AMEL":
+                processed_block[idx] = self._process_amel_value(processed_block[idx], is_mixture)
+            elif is_mixture:
+                processed_block[idx] = processed_block[idx].replace("-", "/")
 
-                    processed_value, microvariant_count, notes = self._process_allele_value(
-                        marker, value, kit, microvariant_count
-                    )
-                    processed_block.append(processed_value)
-                    all_etc_notes.extend(notes)
+    def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
+        """마커 값이 tri-allelic(정상 allele 개수 초과)인지 체크합니다.
 
-            processed_blocks.append(processed_block)
+        Args:
+            value: 마커 값 (예: "15-16", "12-13-14")
+            kit: 키트 종류
 
-        # 특이사항 문자열 조합
-        final_notes = []
+        Returns:
+            bool: tri-allelic 여부
+        """
+        # NC/ND는 tri-allelic 아님
+        if value in KEYWORDS_NOPROFILE:
+            return False
 
-        if flag_mixture:
-            final_notes.append("/ : 혼합 디엔에이형.")
+        limit_allele = LIMIT_ALLELE_BY_KIT[kit]
+        allele_count = len(value.split("-"))
+        return allele_count > limit_allele
 
-        # 미세변이 노트 추가
-        final_notes.extend(all_etc_notes)
+    def _process_profile(
+        self,
+        profile: dict[str, str],
+        kit: Literal["STR", "STR20", "YSTR"],
+        microvariant_count: int = 0
+    ) -> tuple[dict[str, str], ProfileMeta, int]:
+        """dict 형태의 프로필에서 특수 케이스를 처리합니다.
 
-        if flag_ND:
-            final_notes.append("ND : 디엔에이형이 검출되지 않음.")
+        처리 항목:
+        - 혼합 프로필 판단 (tri-allelic 좌위 카운트)
+        - 미세변이 처리 (정수화 + * 표시)
+        - NC/ND 플래그 수집
+        - AMEL 포맷팅
 
-        if flag_NC:
-            final_notes.append("NC : 디엔에이형을 결정할 수 없음.")
+        Args:
+            profile: {marker: value} 형태의 프로필 딕셔너리
+            kit: 키트 종류
+            microvariant_count: 이전까지의 미세변이 카운트 (연속 처리용)
 
-        # 단락 나누기로 조합
-        notes_string = "\n".join(final_notes) if final_notes else ""
+        Returns:
+            tuple[dict[str, str], ProfileMeta, int]:
+                - 처리된 프로필 딕셔너리
+                - 메타데이터 (is_mixture, has_nc, has_nd, microvariant_notes)
+                - 갱신된 미세변이 카운트
+        """
+        markers = DICT_MARKERS[kit]
+        processed_profile = {}
+        meta = ProfileMeta()
+        triallelic_count = 0
 
-        logger.debug(f"처리 완료 - 미세변이: {microvariant_count}개, NC: {flag_NC}, ND: {flag_ND}, 혼합: {flag_mixture}")
-        logger.debug(f"특이사항: {notes_string}")
+        # 1단계: 각 마커별 처리 (미세변이, NC/ND 체크, tri-allelic 카운트)
+        for marker in markers:
+            value = profile.get(marker, "")
 
-        return processed_blocks, notes_string
+            # NC/ND 플래그 체크
+            if value == "NC":
+                meta.has_nc = True
+            elif value == "ND":
+                meta.has_nd = True
 
+            # tri-allelic 체크
+            if self._is_triallelic(value, kit):
+                triallelic_count += 1
 
+            # 미세변이 처리 (AMEL 제외)
+            if marker == "AMEL" or value in KEYWORDS_NOPROFILE:
+                processed_profile[marker] = value
+            else:
+                processed_value, microvariant_count, notes = self._process_allele_value(
+                    marker, value, kit, microvariant_count
+                )
+                processed_profile[marker] = processed_value
+                meta.microvariant_notes.extend(notes)
+
+        # 2단계: 혼합 여부 판단
+        meta.is_mixture = triallelic_count > TA_THRESHOLD
+
+        # 3단계: AMEL 및 혼합 구분자 처리
+        for marker in markers:
+            value = processed_profile[marker]
+            if marker == "AMEL":
+                processed_profile[marker] = self._process_amel_value(value, meta.is_mixture)
+            elif meta.is_mixture and value not in KEYWORDS_NOPROFILE:
+                processed_profile[marker] = value.replace("-", "/")
+
+        return processed_profile, meta, microvariant_count
+
+    def _serialize_profile(
+        self,
+        profile: dict[str, str],
+        markers: list[str]
+    ) -> list[str]:
+        """처리된 프로필 딕셔너리를 마커 순서대로 리스트로 변환합니다.
+
+        Args:
+            profile: {marker: value} 형태의 처리된 프로필
+            markers: 마커 순서 리스트
+
+        Returns:
+            list[str]: 마커 순서대로 정렬된 값 리스트
+        """
+        return [profile.get(marker, "") for marker in markers]
+
+    def _build_notes_string(self, metas: list[ProfileMeta]) -> str:
+        """프로필 메타데이터들을 모아서 특이사항 문자열을 생성합니다.
+
+        Args:
+            metas: ProfileMeta 리스트
+
+        Returns:
+            str: 단락으로 구분된 특이사항 문자열
+        """
+        notes = []
+
+        # 혼합 프로필 여부
+        has_mixture = any(m.is_mixture for m in metas)
+        if has_mixture:
+            notes.append("/ : 혼합 디엔에이형.")
+
+        # 미세변이 노트 수집 (순서 유지)
+        for meta in metas:
+            notes.extend(meta.microvariant_notes)
+
+        # NC/ND 플래그
+        has_nd = any(m.has_nd for m in metas)
+        has_nc = any(m.has_nc for m in metas)
+
+        if has_nd:
+            notes.append("ND : 디엔에이형이 검출되지 않음.")
+        if has_nc:
+            notes.append("NC : 디엔에이형을 결정할 수 없음.")
+
+        return "\n".join(notes) if notes else ""
