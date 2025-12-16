@@ -234,7 +234,7 @@ class NFS_HWPFormatter:
 
 
     def save_and_move_to_firstpage(self):
-        self.hwp_control.Run("MovePageBegin")
+        self.hwp_control.Run("MoveDocBegin")
         self.hwp_control.SaveAs(self.path_report)
 
 
