@@ -81,17 +81,17 @@ class NFS_HWPFormatter:
                         self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
                     if i < len(parts) - 1:  # * 입력 (위첨자)
                         # 위첨자 설정
-                        self.hwp_control.HAction.GetDefault("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
-                        self.hwp_control.HParameterSet.HCharShape.SuperScript = 1
-                        self.hwp_control.HAction.Execute("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
+                        prop = self.hwp_control.CharShape
+                        prop.SetItem("SuperScript", True)
+                        self.hwp_control.CharShape = prop
                         # * 입력
                         self.hwp_control.HAction.GetDefault("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
                         self.hwp_control.HParameterSet.HInsertText.Text = '*'
                         self.hwp_control.HAction.Execute("InsertText", self.hwp_control.HParameterSet.HInsertText.HSet)
                         # 위첨자 해제
-                        self.hwp_control.HAction.GetDefault("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
-                        self.hwp_control.HParameterSet.HCharShape.SuperScript = 0
-                        self.hwp_control.HAction.Execute("CharShape", self.hwp_control.HParameterSet.HCharShape.HSet)
+                        prop = self.hwp_control.CharShape
+                        prop.SetItem("SuperScript", False)
+                        self.hwp_control.CharShape = prop
         
         def input_list_text_vertically(list_text):
             for value in list_text:
