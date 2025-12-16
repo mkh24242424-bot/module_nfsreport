@@ -738,6 +738,31 @@ class NFSReportWriter:
             else:
                 return value.replace("-", "")
 
+    def _apply_mixture_formatting(
+        self,
+        processed_block: list[str],
+        marker_start_idx: int,
+        markers: list[str],
+        is_mixture: bool
+    ) -> None:
+        """프로필의 마커 값들에 혼합 여부에 따른 포맷팅을 적용합니다.
+
+        - AMEL이 markers에 있으면 _process_amel_value로 처리
+        - 혼합이면 AMEL 제외한 나머지 마커들의 "-"를 "/"로 변경
+
+        Args:
+            processed_block: 처리 중인 블록 리스트 (in-place 수정)
+            marker_start_idx: 마커 값들의 시작 인덱스
+            markers: 마커 이름 리스트
+            is_mixture: 혼합 프로필 여부
+        """
+        for i, marker in enumerate(markers):
+            idx = marker_start_idx + i
+            if marker == "AMEL":
+                processed_block[idx] = self._process_amel_value(processed_block[idx], is_mixture)
+            elif is_mixture:
+                processed_block[idx] = processed_block[idx].replace("-", "/")
+
     def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
         """마커 값이 tri-allelic(정상 allele 개수 초과)인지 체크합니다.
 
@@ -831,13 +856,8 @@ class NFSReportWriter:
                 if is_mixture_1:
                     flag_mixture = True
 
-                # AMEL 후처리 (인덱스 2 = 첫번째 마커)
-                processed_block[2] = self._process_amel_value(processed_block[2], is_mixture_1)
-
-                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
-                if is_mixture_1:
-                    for idx in range(3, 2 + num_markers):
-                        processed_block[idx] = processed_block[idx].replace("-", "/")
+                # AMEL 및 혼합 구분자 처리
+                self._apply_mixture_formatting(processed_block, 2, markers, is_mixture_1)
 
                 # 두번째 프로필 증거물 번호
                 second_evidence_idx = 2 + num_markers
@@ -869,14 +889,8 @@ class NFSReportWriter:
                 if is_mixture_2:
                     flag_mixture = True
 
-                # AMEL 후처리 (두번째 프로필의 첫번째 마커)
-                amel_idx_2 = second_evidence_idx + 1
-                processed_block[amel_idx_2] = self._process_amel_value(processed_block[amel_idx_2], is_mixture_2)
-
-                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
-                if is_mixture_2:
-                    for idx in range(amel_idx_2 + 1, amel_idx_2 + num_markers):
-                        processed_block[idx] = processed_block[idx].replace("-", "/")
+                # AMEL 및 혼합 구분자 처리
+                self._apply_mixture_formatting(processed_block, second_evidence_idx + 1, markers, is_mixture_2)
             else:
                 # 단일 블록 처리
                 # [증거물번호+닉네임, m1, m2, ..., mN]
@@ -907,13 +921,8 @@ class NFSReportWriter:
                 if is_mixture:
                     flag_mixture = True
 
-                # AMEL 후처리 (인덱스 1 = 첫번째 마커)
-                processed_block[1] = self._process_amel_value(processed_block[1], is_mixture)
-
-                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
-                if is_mixture:
-                    for idx in range(2, 1 + num_markers):
-                        processed_block[idx] = processed_block[idx].replace("-", "/")
+                # AMEL 및 혼합 구분자 처리
+                self._apply_mixture_formatting(processed_block, 1, markers, is_mixture)
 
             processed_blocks.append(processed_block)
 
