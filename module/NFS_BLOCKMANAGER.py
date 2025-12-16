@@ -1001,6 +1001,11 @@ class EvidenceTextGenerator:
         # 각 행에 대해 반응 포맷팅
         df["반응실험결과"] = df.apply(format_row_reactions, axis=1)
 
+        # DEBUG: 중간 값 확인
+        print("=== DEBUG: _add_reaction_info ===")
+        print(f"표기번호 (before): {df['표기번호'].tolist()}")
+        print(f"반응실험결과: {df['반응실험결과'].tolist()}")
+
         # 모든 반응이 동일한지 확인 (2개 이상일 때만)
         if len(df) > 1:
             unique_reactions = df["반응실험결과"].unique()
@@ -1013,6 +1018,11 @@ class EvidenceTextGenerator:
 
         # 표기번호에 반응 추가
         df["표기번호"] = df["표기번호"] + df["반응실험결과"]
+
+        # DEBUG: 최종 결과 확인
+        print(f"표기번호 (after): {df['표기번호'].tolist()}")
+        print("=== END DEBUG ===")
+
         logger.debug("체액 반응 정보 처리 완료")
 
         return df
