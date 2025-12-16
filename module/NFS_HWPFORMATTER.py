@@ -111,7 +111,6 @@ class NFS_HWPFormatter:
                 self.hwp_control.HAction.Run("MoveLeft")
                 idx_start_second_profile = 2+len(markers)
                 input_list_text_vertically(block[1:idx_start_second_profile])
-                time.sleep(1)
                 # 두번째 프로필 입력란으로 이동
                 self.hwp_control.HAction.Run("TableCellBlock")
                 self.hwp_control.HAction.Run("TableColPageUp")                

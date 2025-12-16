@@ -329,9 +329,7 @@ class NFSReportWriter:
             blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
-                print(block_type)
                 blocks = [block for block in blocks_exported if block.type_block==block_type]
-                print(blocks)
                 if len(blocks)==0:
                     continue
                 phraser = kit_phrasers[block_type]

@@ -121,12 +121,16 @@ sealinfo = [
 ]
 hwp_formatter.fill_seal(sealinfo=sealinfo)
 
-data_profile = RW.make_contents_profile_blocks(kit="STR20")
 
-hwp_formatter.fill_table_profile(serialized_profile=data_profile, kit="STR20")
+logger.info("STR 프로필 표 입력")
+serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="STR20")
+hwp_formatter.fill_fieldtext(field_name="STR프로필_기타", text=note_etc)
+hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="STR20")
 
-data_profile = RW.make_contents_profile_blocks(kit="YSTR")
-hwp_formatter.fill_table_profile(serialized_profile=data_profile, kit="YSTR")
+logger.info("YSTR 프로필 표 입력")
+serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="YSTR")
+hwp_formatter.fill_fieldtext(field_name="YSTR프로필_기타", text=note_etc)
+hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="YSTR")
 logger.info("========== 프로그램 종료 ==========")
 
 
