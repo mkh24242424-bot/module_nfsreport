@@ -6,7 +6,8 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
-        KEYWORDS_NOPROFILE
+        KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
+        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS
 from .constants_strprofile import DICT_MARKERS
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
@@ -585,6 +586,11 @@ class NFSReportWriter:
     def _is_special_case_allele(self, marker: str, allele: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
         """비정형 좌위값 중 허용되는 특수 케이스인지 여부를 체크합니다.
 
+        특수 케이스 상수는 constants_reportwriter.py에서 정의됩니다:
+        - MICROVARIANT_ALLOWED_DECIMALS: 모든 좌위에서 허용되는 소수점
+        - MICROVARIANT_SPECIAL_ALLELES: 좌위별 허용되는 특수 allele 값
+        - MICROVARIANT_SPECIAL_DECIMALS: 좌위별 허용되는 소수점 자릿수
+
         Args:
             marker: 좌위명
             allele: 좌위값 (소수점 포함 문자열)
@@ -602,19 +608,19 @@ class NFSReportWriter:
 
         decimal_place = allele.split(".")[1]
 
-        # .2는 일반적으로 허용되는 특수 케이스
-        if decimal_place == "2":
+        # 일반적으로 허용되는 소수점 자릿수 체크
+        if decimal_place in MICROVARIANT_ALLOWED_DECIMALS:
             return True
 
-        # 좌위별 특수 케이스
-        if marker == "TH01" and allele == "9.3":
-            return True
-        elif marker == "D2S441" and allele == "9.1":
-            return True
-        elif marker == "D1S1656" and allele in ("17.3", "18.3"):
-            return True
-        elif marker in ("Penta E", "Penta D") and decimal_place in ("2", "3"):
-            return True
+        # 좌위별 특수 allele 값 체크
+        if marker in MICROVARIANT_SPECIAL_ALLELES:
+            if allele in MICROVARIANT_SPECIAL_ALLELES[marker]:
+                return True
+
+        # 좌위별 특수 소수점 자릿수 체크
+        if marker in MICROVARIANT_SPECIAL_DECIMALS:
+            if decimal_place in MICROVARIANT_SPECIAL_DECIMALS[marker]:
+                return True
 
         return False
 
@@ -821,15 +827,8 @@ class NFSReportWriter:
         if flag_NC:
             final_notes.append("NC : 디엔에이형을 결정할 수 없음.")
 
-        # 번호 매기기
-        if final_notes:
-            numbered_notes = [
-                f"{idx}) {note}"
-                for idx, note in enumerate(final_notes, start=1)
-            ]
-            notes_string = "\n".join(numbered_notes)
-        else:
-            notes_string = ""
+        # 단락 나누기로 조합
+        notes_string = "\n".join(final_notes) if final_notes else ""
 
         logger.debug(f"처리 완료 - 미세변이: {microvariant_count}개, NC: {flag_NC}, ND: {flag_ND}, 혼합: {flag_mixture}")
         logger.debug(f"특이사항: {notes_string}")
