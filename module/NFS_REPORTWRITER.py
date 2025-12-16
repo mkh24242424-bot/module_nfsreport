@@ -549,12 +549,7 @@ class NFSReportWriter:
             data_serialized = []
             for marker in markers:
                 value = profile[marker]
-                if marker == 'AMEL':
-                    if value=="X":
-                        value="XX"
-                    elif value=='X-Y':
-                        value="X-Y"
-                data_serialized.append(value)     
+                data_serialized.append(value)
             return data_serialized
 
         logger.info(f"표에 넣을 프로필 데이터 생성 시작, kit = {kit}," )
@@ -645,6 +640,10 @@ class NFSReportWriter:
         # NC/ND는 그대로 반환
         if value in KEYWORDS_NOPROFILE:
             return value, microvariant_count, []
+
+        # AMEL 특수 처리: "X" → "XX" (여성 homozygous 표현)
+        if marker == "AMEL" and value == "X":
+            return "XX", microvariant_count, []
 
         # 구분자 결정 (혼합: /, 비혼합: -)
         if "/" in value:
