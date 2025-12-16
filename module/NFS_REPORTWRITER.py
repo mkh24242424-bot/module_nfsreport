@@ -947,4 +947,4 @@ class NFSReportWriter:
         if has_nc:
             notes.append("NC : 디엔에이형을 결정할 수 없음.")
 
-        return "\n".join(notes) if notes else ""
+        return "\r\n".join(notes) if notes else ""
