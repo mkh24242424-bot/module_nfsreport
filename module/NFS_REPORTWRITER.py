@@ -628,7 +628,7 @@ class NFSReportWriter:
                 data.extend(self._serialize_profile(processed2, markers))
             else:
                 # 단일 블록 처리
-                dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit)
+                dict_profile = self._extract_profile_data(id_ref=block.id_ref, kit=kit) # type: ignore
 
                 # 프로필 처리
                 processed, meta, microvariant_count = self._process_profile(
@@ -639,8 +639,8 @@ class NFSReportWriter:
                 # 직렬화
                 evidence_text = (
                     block.text_evidencenumber
-                    if block.nickname == ""
-                    else f"{block.text_evidencenumber}\r\n{block.nickname}"
+                    if block.nickname == ""  # type: ignore
+                    else f"{block.text_evidencenumber}\r\n{block.nickname}" # type: ignore
                 )
                 data.append(evidence_text)
                 data.extend(self._serialize_profile(processed, markers))
@@ -723,10 +723,8 @@ class NFSReportWriter:
         if marker == "AMEL":
             return value, microvariant_count, []
 
-        # 구분자 결정 (혼합: /, 비혼합: -)
-        if "/" in value:
-            separator = "/"
-        elif "-" in value:
+        # 구분자 설정
+        if "-" in value:
             separator = "-"
         else:
             # 단일 값
@@ -815,31 +813,6 @@ class NFSReportWriter:
                 return "XX"
             else:
                 return value.replace("-", "")
-
-    def _apply_mixture_formatting(
-        self,
-        processed_block: list[str],
-        marker_start_idx: int,
-        markers: list[str],
-        is_mixture: bool
-    ) -> None:
-        """프로필의 마커 값들에 혼합 여부에 따른 포맷팅을 적용합니다.
-
-        - AMEL이 markers에 있으면 _process_amel_value로 처리
-        - 혼합이면 AMEL 제외한 나머지 마커들의 "-"를 "/"로 변경
-
-        Args:
-            processed_block: 처리 중인 블록 리스트 (in-place 수정)
-            marker_start_idx: 마커 값들의 시작 인덱스
-            markers: 마커 이름 리스트
-            is_mixture: 혼합 프로필 여부
-        """
-        for i, marker in enumerate(markers):
-            idx = marker_start_idx + i
-            if marker == "AMEL":
-                processed_block[idx] = self._process_amel_value(processed_block[idx], is_mixture)
-            elif is_mixture:
-                processed_block[idx] = processed_block[idx].replace("-", "/")
 
     def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
         """마커 값이 tri-allelic(정상 allele 개수 초과)인지 체크합니다.
