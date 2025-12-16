@@ -629,12 +629,8 @@ class NFSReportWriter:
                 )
                 all_metas.append(meta)
 
-                # 직렬화
-                evidence_text = (
-                    block.text_evidencenumber
-                    if block.nickname == ""  # type: ignore
-                    else f"{block.text_evidencenumber}\r\n{block.nickname}" # type: ignore
-                )
+                # 직렬화. 대조일 경우에만 대조 이름 추가
+                evidence_text = f"{block.text_evidencenumber}\r\n{block.nickname}" if block.type_block == "대조" else block.text_evidencenumber # type: ignore
                 data.append(evidence_text)
                 data.extend(self._serialize_profile(processed, markers))
 
