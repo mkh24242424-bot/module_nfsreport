@@ -865,6 +865,10 @@ class NFSReportWriter:
         for marker in markers:
             value = profile.get(marker, "")
 
+            # 빈칸을 NC로 변환
+            if value == "":
+                value = "NC"
+
             # NC/ND 플래그 체크
             if value == "NC":
                 meta.has_nc = True
@@ -888,13 +892,17 @@ class NFSReportWriter:
         # 2단계: 혼합 여부 판단
         meta.is_mixture = triallelic_count > TA_THRESHOLD
 
-        # 3단계: AMEL 및 혼합 구분자 처리
+        # 3단계: AMEL 및 혼합 구분자 처리, 비혼합 단일값 동형접합 변환
         for marker in markers:
             value = processed_profile[marker]
             if marker == "AMEL":
                 processed_profile[marker] = self._process_amel_value(value, meta.is_mixture)
             elif meta.is_mixture and value not in KEYWORDS_NOPROFILE:
                 processed_profile[marker] = value.replace("-", "/")
+            elif not meta.is_mixture and value not in KEYWORDS_NOPROFILE and kit != "YSTR":
+                # 비혼합이고 단일값인 경우 동형접합 형식으로 변환 (Y-STR 제외)
+                if "-" not in value:
+                    processed_profile[marker] = f"{value}-{value}"
 
         return processed_profile, meta, microvariant_map
 
