@@ -162,6 +162,15 @@ PHRASE_EMPTY = "{text_num}은 내용물 없음\r\n"
 
 KEYWORDS_NOPROFILE = ["NC", "ND"]
 
+# ==================== 혼합 프로필 판단 상수 ====================
+# 키트별 정상 allele 개수 (이 값 초과 시 tri-allelic으로 판단)
+# STR: diploid이므로 2개까지 정상, Y-STR: haploid이므로 1개까지 정상
+LIMIT_ALLELE_BY_KIT: dict[str, int] = {
+    "STR": 2,
+    "STR20": 2,
+    "YSTR": 1,
+}
+
 # ==================== 미세변이(Microvariant) 특수케이스 정의 ====================
 # 소수점이 있지만 미세변이 처리를 하지 않는 특수 케이스들
 

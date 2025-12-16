@@ -7,7 +7,7 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
         KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
-        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS
+        MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS, LIMIT_ALLELE_BY_KIT
 from .constants_strprofile import DICT_MARKERS, TA_THRESHOLD
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
@@ -700,7 +700,7 @@ class NFSReportWriter:
         return result_value, microvariant_count, etc_notes
 
     def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
-        """마커 값이 tri-allelic(3개 이상 allele)인지 체크합니다.
+        """마커 값이 tri-allelic(정상 allele 개수 초과)인지 체크합니다.
 
         Args:
             value: 마커 값 (예: "15-16", "12-13-14")
@@ -713,10 +713,7 @@ class NFSReportWriter:
         if value in KEYWORDS_NOPROFILE:
             return False
 
-        # Y-STR은 haploid이므로 2개 이상이면 tri-allelic
-        # STR은 diploid이므로 3개 이상이면 tri-allelic
-        limit_allele = 1 if kit == "YSTR" else 2
-
+        limit_allele = LIMIT_ALLELE_BY_KIT[kit]
         allele_count = len(value.split("-"))
         return allele_count > limit_allele
 
@@ -790,9 +787,13 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 첫번째 프로필 혼합 여부 판단
-                if triallelic_count_1 > TA_THRESHOLD:
+                # 첫번째 프로필 혼합 여부 판단 및 구분자 변경
+                is_mixture_1 = triallelic_count_1 > TA_THRESHOLD
+                if is_mixture_1:
                     flag_mixture = True
+                    # 첫번째 프로필 마커 값들의 "-"를 "/"로 변경 (인덱스 2 ~ 2+num_markers-1)
+                    for idx in range(2, 2 + num_markers):
+                        processed_block[idx] = processed_block[idx].replace("-", "/")
 
                 # 두번째 프로필 증거물 번호
                 second_evidence_idx = 2 + num_markers
@@ -819,9 +820,14 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 두번째 프로필 혼합 여부 판단
-                if triallelic_count_2 > TA_THRESHOLD:
+                # 두번째 프로필 혼합 여부 판단 및 구분자 변경
+                is_mixture_2 = triallelic_count_2 > TA_THRESHOLD
+                if is_mixture_2:
                     flag_mixture = True
+                    # 두번째 프로필 마커 값들의 "-"를 "/"로 변경
+                    marker_start_idx = second_evidence_idx + 1
+                    for idx in range(marker_start_idx, marker_start_idx + num_markers):
+                        processed_block[idx] = processed_block[idx].replace("-", "/")
             else:
                 # 단일 블록 처리
                 # [증거물번호+닉네임, m1, m2, ..., mN]
@@ -847,9 +853,13 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 혼합 여부 판단
-                if triallelic_count > TA_THRESHOLD:
+                # 혼합 여부 판단 및 구분자 변경
+                is_mixture = triallelic_count > TA_THRESHOLD
+                if is_mixture:
                     flag_mixture = True
+                    # 마커 값들의 "-"를 "/"로 변경 (인덱스 1 ~ 1+num_markers-1)
+                    for idx in range(1, 1 + num_markers):
+                        processed_block[idx] = processed_block[idx].replace("-", "/")
 
             processed_blocks.append(processed_block)
 
