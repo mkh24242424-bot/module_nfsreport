@@ -641,9 +641,9 @@ class NFSReportWriter:
         if value in KEYWORDS_NOPROFILE:
             return value, microvariant_count, []
 
-        # AMEL 특수 처리: "X" → "XX" (여성 homozygous 표현)
-        if marker == "AMEL" and value == "X":
-            return "XX", microvariant_count, []
+        # AMEL은 혼합 여부에 따라 후처리되므로 그대로 반환
+        if marker == "AMEL":
+            return value, microvariant_count, []
 
         # 구분자 결정 (혼합: /, 비혼합: -)
         if "/" in value:
@@ -698,6 +698,45 @@ class NFSReportWriter:
             result_value = value
 
         return result_value, microvariant_count, etc_notes
+
+    def _process_amel_value(self, value: str, is_mixture: bool) -> str:
+        """AMEL 값을 혼합 여부에 따라 처리합니다.
+
+        비혼합:
+            - "X-Y" → "XY"
+            - "X-X" → "XX"
+            - "X" → "XX"
+
+        혼합:
+            - "X-Y" → "X/Y"
+            - "X-X" → "X"
+            - "X" → "X"
+
+        Args:
+            value: AMEL 마커 값
+            is_mixture: 해당 프로필의 혼합 여부
+
+        Returns:
+            str: 처리된 AMEL 값
+        """
+        if value in KEYWORDS_NOPROFILE:
+            return value
+
+        if is_mixture:
+            # 혼합: homozygous는 단일 표현, heterozygous는 "/" 구분
+            if value in ("X-X", "X"):
+                return "X"
+            elif value == "X-Y":
+                return "X/Y"
+            else:
+                # 기타 경우 (예: X-X-Y 등)
+                return value.replace("-", "/")
+        else:
+            # 비혼합: "-" 제거하여 붙임
+            if value == "X":
+                return "XX"
+            else:
+                return value.replace("-", "")
 
     def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
         """마커 값이 tri-allelic(정상 allele 개수 초과)인지 체크합니다.
@@ -787,12 +826,17 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 첫번째 프로필 혼합 여부 판단 및 구분자 변경
+                # 첫번째 프로필 혼합 여부 판단 및 후처리
                 is_mixture_1 = triallelic_count_1 > TA_THRESHOLD
                 if is_mixture_1:
                     flag_mixture = True
-                    # 첫번째 프로필 마커 값들의 "-"를 "/"로 변경 (인덱스 2 ~ 2+num_markers-1)
-                    for idx in range(2, 2 + num_markers):
+
+                # AMEL 후처리 (인덱스 2 = 첫번째 마커)
+                processed_block[2] = self._process_amel_value(processed_block[2], is_mixture_1)
+
+                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
+                if is_mixture_1:
+                    for idx in range(3, 2 + num_markers):
                         processed_block[idx] = processed_block[idx].replace("-", "/")
 
                 # 두번째 프로필 증거물 번호
@@ -820,13 +864,18 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 두번째 프로필 혼합 여부 판단 및 구분자 변경
+                # 두번째 프로필 혼합 여부 판단 및 후처리
                 is_mixture_2 = triallelic_count_2 > TA_THRESHOLD
                 if is_mixture_2:
                     flag_mixture = True
-                    # 두번째 프로필 마커 값들의 "-"를 "/"로 변경
-                    marker_start_idx = second_evidence_idx + 1
-                    for idx in range(marker_start_idx, marker_start_idx + num_markers):
+
+                # AMEL 후처리 (두번째 프로필의 첫번째 마커)
+                amel_idx_2 = second_evidence_idx + 1
+                processed_block[amel_idx_2] = self._process_amel_value(processed_block[amel_idx_2], is_mixture_2)
+
+                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
+                if is_mixture_2:
+                    for idx in range(amel_idx_2 + 1, amel_idx_2 + num_markers):
                         processed_block[idx] = processed_block[idx].replace("-", "/")
             else:
                 # 단일 블록 처리
@@ -853,12 +902,17 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
-                # 혼합 여부 판단 및 구분자 변경
+                # 혼합 여부 판단 및 후처리
                 is_mixture = triallelic_count > TA_THRESHOLD
                 if is_mixture:
                     flag_mixture = True
-                    # 마커 값들의 "-"를 "/"로 변경 (인덱스 1 ~ 1+num_markers-1)
-                    for idx in range(1, 1 + num_markers):
+
+                # AMEL 후처리 (인덱스 1 = 첫번째 마커)
+                processed_block[1] = self._process_amel_value(processed_block[1], is_mixture)
+
+                # 혼합일 경우 나머지 마커(AMEL 제외)의 "-"를 "/"로 변경
+                if is_mixture:
+                    for idx in range(2, 1 + num_markers):
                         processed_block[idx] = processed_block[idx].replace("-", "/")
 
             processed_blocks.append(processed_block)
