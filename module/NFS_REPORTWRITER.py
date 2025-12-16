@@ -8,7 +8,7 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
         REPORT_TYPE_PHRASERS, DEFAULT_LR, RETURN_STATUSES, ETC_CONDITIONS, PHRASE_EMPTY, \
         KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
         MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS
-from .constants_strprofile import DICT_MARKERS
+from .constants_strprofile import DICT_MARKERS, TA_THRESHOLD
 from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
 logger = logging.getLogger(__name__) 
@@ -699,6 +699,27 @@ class NFSReportWriter:
 
         return result_value, microvariant_count, etc_notes
 
+    def _is_triallelic(self, value: str, kit: Literal["STR", "STR20", "YSTR"]) -> bool:
+        """마커 값이 tri-allelic(3개 이상 allele)인지 체크합니다.
+
+        Args:
+            value: 마커 값 (예: "15-16", "12-13-14")
+            kit: 키트 종류
+
+        Returns:
+            bool: tri-allelic 여부
+        """
+        # NC/ND는 tri-allelic 아님
+        if value in KEYWORDS_NOPROFILE:
+            return False
+
+        # Y-STR은 haploid이므로 2개 이상이면 tri-allelic
+        # STR은 diploid이므로 3개 이상이면 tri-allelic
+        limit_allele = 1 if kit == "YSTR" else 2
+
+        allele_count = len(value.split("-"))
+        return allele_count > limit_allele
+
     def process_serialized_blocks(
         self,
         serialized_blocks: list[list[str]],
@@ -746,6 +767,9 @@ class NFSReportWriter:
                 processed_block.append(block[0])  # 전체 증거물 번호
                 processed_block.append(block[1])  # 첫번째 프로필 증거물 번호
 
+                # 첫번째 프로필: tri-allelic 좌위 카운트
+                triallelic_count_1 = 0
+
                 # 첫번째 프로필 마커 값들 (인덱스 2 ~ 2+num_markers-1)
                 for i, marker in enumerate(markers):
                     value = block[2 + i]
@@ -756,9 +780,9 @@ class NFSReportWriter:
                     elif value == "ND":
                         flag_ND = True
 
-                    # 혼합 프로필 체크
-                    if "/" in value:
-                        flag_mixture = True
+                    # tri-allelic 체크
+                    if self._is_triallelic(value, kit):
+                        triallelic_count_1 += 1
 
                     processed_value, microvariant_count, notes = self._process_allele_value(
                         marker, value, kit, microvariant_count
@@ -766,9 +790,16 @@ class NFSReportWriter:
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
 
+                # 첫번째 프로필 혼합 여부 판단
+                if triallelic_count_1 > TA_THRESHOLD:
+                    flag_mixture = True
+
                 # 두번째 프로필 증거물 번호
                 second_evidence_idx = 2 + num_markers
                 processed_block.append(block[second_evidence_idx])
+
+                # 두번째 프로필: tri-allelic 좌위 카운트
+                triallelic_count_2 = 0
 
                 # 두번째 프로필 마커 값들
                 for i, marker in enumerate(markers):
@@ -779,18 +810,25 @@ class NFSReportWriter:
                     elif value == "ND":
                         flag_ND = True
 
-                    if "/" in value:
-                        flag_mixture = True
+                    if self._is_triallelic(value, kit):
+                        triallelic_count_2 += 1
 
                     processed_value, microvariant_count, notes = self._process_allele_value(
                         marker, value, kit, microvariant_count
                     )
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
+
+                # 두번째 프로필 혼합 여부 판단
+                if triallelic_count_2 > TA_THRESHOLD:
+                    flag_mixture = True
             else:
                 # 단일 블록 처리
                 # [증거물번호+닉네임, m1, m2, ..., mN]
                 processed_block.append(block[0])  # 증거물 번호 (+ 닉네임)
+
+                # tri-allelic 좌위 카운트
+                triallelic_count = 0
 
                 for i, marker in enumerate(markers):
                     value = block[1 + i]
@@ -800,14 +838,18 @@ class NFSReportWriter:
                     elif value == "ND":
                         flag_ND = True
 
-                    if "/" in value:
-                        flag_mixture = True
+                    if self._is_triallelic(value, kit):
+                        triallelic_count += 1
 
                     processed_value, microvariant_count, notes = self._process_allele_value(
                         marker, value, kit, microvariant_count
                     )
                     processed_block.append(processed_value)
                     all_etc_notes.extend(notes)
+
+                # 혼합 여부 판단
+                if triallelic_count > TA_THRESHOLD:
+                    flag_mixture = True
 
             processed_blocks.append(processed_block)
 
