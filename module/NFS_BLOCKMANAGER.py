@@ -1008,7 +1008,7 @@ class EvidenceTextGenerator:
                 # 모두 같은 반응이면 마지막만 "(모두 ...)" 형태로 남기고 나머지는 빈 문자열
                 equivalent_reaction = unique_reactions[0].replace("(", "(모두 ")
                 df["반응실험결과"] = ""
-                df.at[df.index[-1], "반응실험결과"] = equivalent_reaction
+                df.iloc[-1, df.columns.get_loc("반응실험결과")] = equivalent_reaction
                 logger.debug(f"동일 반응 감지: {equivalent_reaction}")
 
         # 표기번호에 반응 추가
