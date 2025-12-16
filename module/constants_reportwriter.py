@@ -162,5 +162,24 @@ PHRASE_EMPTY = "{text_num}은 내용물 없음\r\n"
 
 KEYWORDS_NOPROFILE = ["NC", "ND"]
 
+# ==================== 미세변이(Microvariant) 특수케이스 정의 ====================
+# 소수점이 있지만 미세변이 처리를 하지 않는 특수 케이스들
+
+# 일반적으로 허용되는 소수점 자릿수 (모든 좌위에 적용)
+MICROVARIANT_ALLOWED_DECIMALS: set[str] = {"2"}
+
+# 좌위별 허용되는 특수 allele 값 {좌위명: {허용값들}}
+MICROVARIANT_SPECIAL_ALLELES: dict[str, set[str]] = {
+    "TH01": {"9.3"},
+    "D2S441": {"9.1"},
+    "D1S1656": {"17.3", "18.3"},
+}
+
+# 좌위별 허용되는 소수점 자릿수 {좌위명: {허용 소수점들}}
+MICROVARIANT_SPECIAL_DECIMALS: dict[str, set[str]] = {
+    "Penta E": {"2", "3"},
+    "Penta D": {"2", "3"},
+}
+
 # Valid report type names (for validation)
 VALID_REPORT_TYPES = set(REPORT_TYPE_PHRASERS.keys())
