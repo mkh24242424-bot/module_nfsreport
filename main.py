@@ -131,6 +131,14 @@ logger.info("YSTR 프로필 표 입력")
 serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="YSTR")
 hwp_formatter.fill_fieldtext(field_name="YSTR프로필_기타", text=note_etc)
 hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="YSTR")
+
+logger.info("이미지 입력")
+paths_img = ["C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-1.JPG",
+             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-2.JPG",
+             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-3.JPG",
+             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-4.JPG",
+             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-5.JPG",]
+hwp_formatter.insert_pictures(paths_img=paths_img)
 logger.info("========== 프로그램 종료 ==========")
 
 
