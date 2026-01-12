@@ -355,7 +355,7 @@ class NFSReportWriter:
         
         return phrases_result
 
-    def _make_contents_dbsearch_results(self) -> str:
+    def _make_contents_dbsearch_results(self) -> list:
         """DB 검색 결과를 감정서에 바로 쓸 수 있는 형태로 편집"""
         df_search = self.report_data.evidenceinfo[
             self.report_data.evidenceinfo["검색_결과"] != "검색 안함"
@@ -393,7 +393,7 @@ class NFSReportWriter:
                 phrase += PHRASE_MATCH_PROB.format(base=base, power=power)
                 phrases.append(phrase)
         
-        return "\n".join(phrases)  # 또는 기존 반환 형식에 맞게
+        return phrases  # 또는 기존 반환 형식에 맞게
     
     def make_contents_result(self) -> str:
         """감정 결과 문구를 감정서에 바로 쓸 수 있는 형태로 편집"""
@@ -411,7 +411,7 @@ class NFSReportWriter:
         # 3. DB 검색 결과 추가
         phrase_dbsearch = self._make_contents_dbsearch_results()
         if phrase_dbsearch:
-            phrases_result.append(phrase_dbsearch)
+            phrases_result.extend(phrase_dbsearch)
 
         # 4. 최종 문구 결합
         numbered_phrases = []

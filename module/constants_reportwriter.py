@@ -123,7 +123,7 @@ ETC_CONDITIONS: list[EtcCondition] = [
     EtcCondition(
         key="수형인일치",
         phrase="수형인 등과 일치건에 대한 검색결과는 대검찰청에서 별도 회보함.\r\n",
-        condition=lambda text: "수형인 등과 일치 건" in text
+        condition=lambda text: "수형인 등과 일치 건 있음" in text
     ),
     EtcCondition(
         key="DB저장",
@@ -140,7 +140,7 @@ ETC_CONDITIONS: list[EtcCondition] = [
             "「디엔에이신원확인정보의 이용 및 보호에 관한 법률」에 따라, "
             "신원이 확인된 본 건 관련 범죄현장 증거물의 디엔에이형은 데이터베이스에서 삭제하겠음.\r\n"
         ),
-        condition=lambda text: "수형인 등과 일치 건" in text \
+        condition=lambda text: "수형인 등과 일치 건 있음" in text \
                                 or "구속피의자 식별코드" in text \
                                 or "다음 [표]의 사건에서 확보된 디엔에이형과 일치함." in text
     ),
