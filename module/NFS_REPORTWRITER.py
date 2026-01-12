@@ -324,10 +324,10 @@ class NFSReportWriter:
             blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
+                phraser = kit_phrasers[block_type]
                 blocks = [block for block in blocks_exported if block.type_block==block_type]
                 if len(blocks)==0:
                     continue
-                phraser = kit_phrasers[block_type]
 
                 for block in blocks:
                     if isinstance(block, PairedProfileBlock):
@@ -338,7 +338,8 @@ class NFSReportWriter:
                             phraser=phraser,
                             kit=kit
                         )
-                    phrases_result.append(phrase)
+                    if phrase != "": # 예: 대조 시료만 블록에 있고 감정서에 작성할 필요가 없다면 빈 문자열을 반환하도록 설정할 수 있음.
+                        phrases_result.append(phrase)
                     logger.debug(
                         f"{kit} {block_type} 문구 생성 "
                     )
@@ -562,7 +563,7 @@ class NFSReportWriter:
                 for idx, phrase in enumerate(phrases_etc, start=1)
             ]
             phrase_final = "\n".join(numbered_phrases) 
-        return phrase_final
+        return phrase_final.strip()
             
     def make_contents_profile_blocks(
         self,

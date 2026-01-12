@@ -13,7 +13,7 @@ from datetime import datetime
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.CRITICAL,
     format='[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s:%(lineno)d] - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -48,7 +48,7 @@ pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
 logger.info("NFSReportInformation 객체 생성")
-id_case = "2025-C-6845"
+id_case = input("사건 번호를 입력하세요 (예: 2025-C-6745): ")
 info = NFS_RI.NFSReportInformation(id_case=id_case)
 
 logger.info("사건 정보 추출 시작")
@@ -85,8 +85,7 @@ blocks_manager_ystr = NFS_BM.BlockProfileManager(
     kit='YSTR'
 )
 blocks_manager_ystr.generate_blocks()
-
-type_report = "default"
+type_report = input("감정서 유형을 입력하세요 (df/d): ")
 logger.info("NFSReportWriter 객체 생성")
 RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr, type_report=type_report)
 
@@ -95,7 +94,7 @@ path_base = os.path.dirname(os.path.abspath(__file__))
 hwp_formatter = NFS_HWP.NFS_HWPFormatter(path_base=path_base)
 
 logger.info("새 감정서 생성")
-hwp_formatter.create_new_report(code_case=info.id_case, type_report="DEFAULT")
+hwp_formatter.create_new_report(code_case=info.id_case, type_report=type_report)
 
 logger.info("꼬리말 바코드 입력")
 saved_path = generate_barcode_no_text(text=id_case, filename="barcode")
@@ -149,11 +148,7 @@ hwp_formatter.fill_fieldtext(field_name="YSTR프로필_기타", text=note_etc)
 hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="YSTR")
 
 logger.info("이미지 입력")
-paths_img = ["C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-1.JPG",
-             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-2.JPG",
-             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-3.JPG",
-             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-4.JPG",
-             "C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-5.JPG",]
+paths_img = ["C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-1.JPG"]
 hwp_formatter.insert_pictures(paths_img=paths_img)
 
 hwp_formatter.save_and_move_to_firstpage()
