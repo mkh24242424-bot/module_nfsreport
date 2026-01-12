@@ -202,11 +202,10 @@ class NFSReportWriter:
             return {}   
         return []
     
-    
     def _get_processed_evidence_num(self, df_subset) -> str:
         """증거물번호 전처리"""
-        list_id = df_subset['감정물번호'].tolist()
-        text_num = self.blocks_manager['STR'].evidence_text_generator.create_text_evidence(indexes=list_id, kit="STR")
+        list_idx = df_subset.index.tolist()
+        text_num = self.blocks_manager['STR'].evidence_text_generator.create_text_evidence(indexes=list_idx, kit="STR")
         text_num = re.sub(r"\(상피세포층\)|\(정자층\)|[a-zA-Z]", "", text_num)
         text_num = " 및 ".join(dict.fromkeys(text_num.split(" 및 ")))
         text_num = ", ".join(dict.fromkeys(text_num.split(", ")))
@@ -321,7 +320,10 @@ class NFSReportWriter:
             logger.debug(f"{kit} 블록 처리 시작")
             block_manager = self.blocks_manager[kit]
             kit_phrasers = phrasers[kit]
-            blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
+            if kit=="STR":
+                blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
+            elif kit=="YSTR":
+                blocks_exported = block_manager.export_blocks(block_type='single', reaction=False)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
                 phraser = kit_phrasers[block_type]
@@ -448,7 +450,7 @@ class NFSReportWriter:
                     normalized[key] = item
             else:
                 normalized[key] = item
-        
+        print(normalized)
         # 3. 현물 증거물에 실험 부위 작성란 추가
         has_sub_items = {k[:-1] for k in evidence if k[-1].isalpha()}
         

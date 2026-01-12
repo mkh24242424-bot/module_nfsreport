@@ -766,6 +766,7 @@ class BlockProfileManager:
 
         return sorted_blocks # type: ignore
 
+
 class EvidenceTextGenerator:
     """증거물 ID를 감정서 형식 텍스트로 변환
 
@@ -930,7 +931,7 @@ class EvidenceTextGenerator:
             1
         """
         logger.debug(f"증거물 필터링 시작 (kit={kit}, 입력 IDX 수={len(indexes)})")
-
+        logger.debug(f"indexes: {indexes}")
         # 키트별 컬럼명 결정
         if kit not in COLNAME_PER_KIT:
             logger.error(f"잘못된 kit 값: {kit}. 'STR' 또는 'YSTR'이어야 합니다.")
@@ -944,14 +945,14 @@ class EvidenceTextGenerator:
         original_size = len(df)
         df = df[df[col_text_evidence] != "미기재"].copy()
         logger.debug(f"미기재 제외 (전: {original_size}, 후: {len(df)})")
-
+        
         # 2단계: 표기번호 컬럼 추가
         df['표기번호'] = df[col_text_evidence]
 
         # 3단계: 다음 감정물번호 추가 (list_id 필터링 전에 계산)
         # 이렇게 해야 원본 데이터셋에서의 실제 연속성을 정확히 판단할 수 있음
         df["감정물번호_다음"] = df["감정물번호"].shift(-1)
-
+        
         # 4단계: 지정된 index만 필터링
         df = df.loc[indexes]
         logger.debug(f"ID 필터링 후 데이터 크기: {len(df)}")

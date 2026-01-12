@@ -33,7 +33,7 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
             "NC": NFS_RP.make_phrase_nc,
         },
         "YSTR": {
-            "대조": NFS_RP.make_phrase_suspect_match_y,
+            "대조": NFS_RP.make_phrase_none,
             "대조일치": NFS_RP.make_phrase_ref_y,
             "대표일치": NFS_RP.make_phrase_res_y,
             "ND": NFS_RP.make_phrase_nd_y,
