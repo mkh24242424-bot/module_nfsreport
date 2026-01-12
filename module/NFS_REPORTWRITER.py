@@ -353,22 +353,46 @@ class NFSReportWriter:
 
             logger.debug(f"{kit} 블록 처리 완료")
         
-        #특수: Y-STR 문구를 하나로 합치고 서브 번호로 구분하기 위해 @ 기호 삽입
-        idx_ystr = []
-        for i, phrase in enumerate(phrases_result):
-            if "Y-STR" in phrase:
-                idx_ystr.append(i)
-        if len(idx_ystr)>1:
-            phrases_ystr = ["남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, " ]
-            for subnumber, idx_list in enumerate(idx_ystr):
-                processed_result = phrases_result[idx_list].replace("남성 특이적인 Y-STR 디엔에이형 추가 분석 결과,", "")
-                processed_result = f" @{subnumber+1}) {processed_result.strip()}"
-                phrases_ystr.append(processed_result)
-            #기존 Y-STR 문구 삭제
-            for i in reversed(idx_ystr):
-                del phrases_result[i]
-            #합친 문구 추가
-            phrases_result.append("\r\n".join(phrases_ystr) + "\r\n")
+        # Y-STR 문구가 여러 개인 경우 하나로 병합
+        phrases_result = self._merge_ystr_phrases(phrases_result)
+        return phrases_result
+
+    def _merge_ystr_phrases(self, phrases_result: list[str]) -> list[str]:
+        """여러 Y-STR 문구를 하나로 합치고 서브번호로 구분합니다.
+
+        Y-STR 결과가 2개 이상일 때 개별 문구를 삭제하고
+        하나의 합친 문구로 대체합니다. 서브번호는 @ 기호로 표시되며,
+        이후 make_contents_result에서 실제 번호로 치환됩니다.
+
+        Args:
+            phrases_result: 감정 결과 문구 리스트
+
+        Returns:
+            list[str]: Y-STR 문구가 병합된 결과 리스트
+        """
+        YSTR_KEYWORD = "Y-STR"
+        YSTR_PREFIX = "남성 특이적인 Y-STR 디엔에이형 추가 분석 결과,"
+
+        # Y-STR 문구 인덱스 수집
+        idx_ystr = [i for i, phrase in enumerate(phrases_result) if YSTR_KEYWORD in phrase]
+
+        # Y-STR 문구가 1개 이하면 병합 불필요
+        if len(idx_ystr) <= 1:
+            return phrases_result
+
+        # 합친 문구 생성
+        merged_phrases = [f"{YSTR_PREFIX} "]
+        for subnumber, idx in enumerate(idx_ystr, start=1):
+            processed = phrases_result[idx].replace(YSTR_PREFIX, "").strip()
+            merged_phrases.append(f" @{subnumber}) {processed}")
+
+        # 기존 Y-STR 문구 삭제 (역순으로 삭제하여 인덱스 유지)
+        for i in reversed(idx_ystr):
+            del phrases_result[i]
+
+        # 합친 문구 추가
+        phrases_result.append("\r\n".join(merged_phrases) + "\r\n")
+
         return phrases_result
 
     def _make_contents_dbsearch_results(self) -> list:
