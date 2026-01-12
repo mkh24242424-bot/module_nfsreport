@@ -353,6 +353,22 @@ class NFSReportWriter:
 
             logger.debug(f"{kit} 블록 처리 완료")
         
+        #특수: Y-STR 문구를 하나로 합치고 서브 번호로 구분하기 위해 @ 기호 삽입
+        idx_ystr = []
+        for i, phrase in enumerate(phrases_result):
+            if "Y-STR" in phrase:
+                idx_ystr.append(i)
+        if len(idx_ystr)>1:
+            phrases_ystr = ["남성 특이적인 Y-STR 디엔에이형 추가 분석 결과, " ]
+            for subnumber, idx_list in enumerate(idx_ystr):
+                processed_result = phrases_result[idx_list].replace("남성 특이적인 Y-STR 디엔에이형 추가 분석 결과,", "")
+                processed_result = f" @{subnumber+1}) {processed_result.strip()}"
+                phrases_ystr.append(processed_result)
+            #기존 Y-STR 문구 삭제
+            for i in reversed(idx_ystr):
+                del phrases_result[i]
+            #합친 문구 추가
+            phrases_result.append("\r\n".join(phrases_ystr) + "\r\n")
         return phrases_result
 
     def _make_contents_dbsearch_results(self) -> list:
