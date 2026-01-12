@@ -437,22 +437,38 @@ class NFSReportWriter:
             if not any(kw in item for kw in KEYWORD_IGNORE_EVIDENCE):
                 evidence[key] = item
         
-        # 2. 키 정규화 (M/F, a/b 등 접미사 철;)
+        # 2. 키 정규화 (M/F, a/b 등 접미사 처리)
         normalized = {}
         for key, item in evidence.items():
-            if key.endswith(('M', 'F')):
-                normalized[key[:-1]] = item
-            elif key[-1].isalpha():
-                if key[-1]=='a':
-                    normalized[key[:-1]] = item
-                    normalized[key] = item
+            base_key = key
+
+            # M/F 접미사 먼저 제거
+            if base_key.endswith(('M', 'F')):
+                base_key = base_key[:-1]
+
+            # a/b 등 알파벳 접미사 처리
+            if base_key and base_key[-1].isalpha():
+                if base_key[-1] == 'a':
+                    # 'a'인 경우 부모 키와 자신 모두 추가
+                    parent_key = base_key[:-1]
+                    normalized[parent_key] = item
+                    normalized[base_key] = item
                 else:
-                    normalized[key] = item
+                    # 다른 알파벳(b, c 등)은 자신만 추가
+                    normalized[base_key] = item
             else:
-                normalized[key] = item
-        print(normalized)
+                # 숫자로 끝나는 경우
+                normalized[base_key] = item
+
         # 3. 현물 증거물에 실험 부위 작성란 추가
-        has_sub_items = {k[:-1] for k in evidence if k[-1].isalpha()}
+        # M/F와 a/b가 동시에 있는 경우를 고려하여 부모 키 계산
+        has_sub_items = set()
+        for k in evidence:
+            base = k
+            if base.endswith(('M', 'F')):
+                base = base[:-1]
+            if base and base[-1].isalpha():
+                has_sub_items.add(base[:-1])
         
         for key, item in normalized.items():
             is_physical = not any(kw in item for kw in KEYWORD_NONSTUFF)
