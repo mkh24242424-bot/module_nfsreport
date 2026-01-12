@@ -13,7 +13,7 @@ from datetime import datetime
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.CRITICAL,
+    level=logging.DEBUG,
     format='[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s:%(lineno)d] - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )

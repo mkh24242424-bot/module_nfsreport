@@ -652,7 +652,7 @@ class BlockProfileManager:
         logger.debug(f"Paired blocks 생성 완료 (총 {len(paired_blocks)}개)")
         return paired_blocks
 
-    def export_blocks(self, block_type: Literal['single', 'pair'], reaction: bool = False) -> list[ProfileBlock]:
+    def export_blocks(self, block_type: Literal['single', 'pair'], reaction: bool = False, table: bool = False) -> list[ProfileBlock]:
         """생성된 블록 리스트를 지정된 형식으로 반환
 
         블록 유형과 체액반응 포함 여부에 따라 블록을 처리하고 반환합니다.
@@ -756,7 +756,8 @@ class BlockProfileManager:
             block.text_evidencenumber = self.evidence_text_generator.create_text_evidence( # type: ignore
                 indexes=block.indexes,
                 kit=self.kit,
-                reaction=reaction
+                reaction=reaction,
+                table=table
             )
         logger.debug("증거물 텍스트 생성 완료 ")
 
@@ -832,7 +833,7 @@ class EvidenceTextGenerator:
 
     # ==================== Public Interface ====================
 
-    def create_text_evidence(self, indexes: list, kit: str = "STR", reaction: bool = False) -> str:
+    def create_text_evidence(self, indexes: list, kit: str = "STR", reaction: bool = False, table: bool = False) -> str:
         """증거물 ID를 감정서 형식 텍스트로 변환
 
         증거물 ID 리스트를 받아 감정서에 사용되는 형식으로 변환합니다.
@@ -893,8 +894,8 @@ class EvidenceTextGenerator:
             logger.debug(f"증거물 텍스트 생성 완료: {result}")
             return result
 
-        if evidence_count == 2:
-            logger.debug("2개 증거물 처리 ('및'로 연결)")
+        if evidence_count == 2 and not table:
+            logger.debug("프로필 표 이외에 사용될 때 2개 증거물 처리 ('및'로 연결)")
             result = f"{filtered_df.iloc[0]['표기번호']} 및 {filtered_df.iloc[1]['표기번호']}"
             logger.debug(f"증거물 텍스트 생성 완료: {result}")
             return result

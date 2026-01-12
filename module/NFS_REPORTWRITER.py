@@ -320,9 +320,9 @@ class NFSReportWriter:
             logger.debug(f"{kit} 블록 처리 시작")
             block_manager = self.blocks_manager[kit]
             kit_phrasers = phrasers[kit]
-            if kit=="STR":
+            if kit in ["STR", "STR20"]:
                 blocks_exported = block_manager.export_blocks(block_type='pair', reaction=True)
-            elif kit=="YSTR":
+            elif kit == "YSTR":
                 blocks_exported = block_manager.export_blocks(block_type='single', reaction=False)
             # 2. 각 블록 유형별 처리
             for block_type in kit_phrasers:
@@ -645,7 +645,10 @@ class NFSReportWriter:
 
         markers = DICT_MARKERS[kit]
         block_manager = self.blocks_manager["STR"] if kit in ["STR", "STR20"] else self.blocks_manager[kit]
-        blocks = block_manager.export_blocks(block_type='pair', reaction=False)
+        if kit in ["STR", "STR20"]:
+            blocks = block_manager.export_blocks(block_type='pair', reaction=False, table=True)
+        elif kit == "YSTR":
+            blocks = block_manager.export_blocks(block_type='single', reaction=False, table=True)
 
         serialized_blocks = []
         all_metas: list[ProfileMeta] = []
