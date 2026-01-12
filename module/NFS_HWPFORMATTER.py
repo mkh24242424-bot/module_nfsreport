@@ -28,6 +28,10 @@ class NFS_HWPFormatter:
         else:
             raise ValueError(f"필드 이름 '{field_name}'이(가) 정의되어 있지 않습니다.") 
 
+    def fill_barcode(self, path_barcode:str):
+        self.hwp_control.MoveToField(NAME_FIELDTABLE["TABLE_BARCODE"])
+        self.hwp_control.InsertPicture(path_barcode, sizeoption=2) # 2: 필드 크기에 맞춤
+
     def fill_seal(self, sealinfo:list[dict[str,str]]):
         for idx, seal in enumerate(sealinfo):
             if idx >= len(LIST_SEALFIELD):
@@ -50,7 +54,6 @@ class NFS_HWPFormatter:
             self.hwp_control.HAction.GetDefault("Paste", self.hwp_control.HParameterSet.HSelectionOpt.HSet)
             self.hwp_control.HParameterSet.HSelectionOpt.option = 1
             self.hwp_control.HAction.Execute("Paste", self.hwp_control.HParameterSet.HSelectionOpt.HSet)
-
         
         def split_headline():
             self.hwp_control.HAction.Run("TableCellBlock")
@@ -252,7 +255,6 @@ class NFS_HWPFormatter:
                 self.hwp_control.Run("MoveDown")
                 self.hwp_control.Run("MoveLeft")
                 self.hwp_control.Run("MoveLeft")
-
 
     def save_and_move_to_firstpage(self):
         self.hwp_control.Run("MoveDocBegin")

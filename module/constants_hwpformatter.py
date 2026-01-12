@@ -20,7 +20,7 @@ NAME_FIELDTEXT ={
     "소속": "position",
     "STR프로필_기타":"STR_ETC",
     "YSTR프로필_기타":"YSTR_ETC",
-
+    "작성일":"#작성일"
 }
 
 NAME_FIELDTABLE = {
@@ -31,7 +31,8 @@ NAME_FIELDTABLE = {
     "TABLE_IMG_MULTI_FIRSTCELL":"TABLE_IMG_MULTI_FIRSTCELL",
     "IMG_MULTI_FIRST":"IMG_MULTI_FIRST",
     "TABLE_IMG_ONE_FIRSTCELL":"TABLE_IMG_ONE_FIRSTCELL",
-    "IMG_ONE":"IMG_ONE"
+    "IMG_ONE":"IMG_ONE",
+    "TABLE_BARCODE":"#barcode"
 }
 
 # 도장 관련 데이터클래스

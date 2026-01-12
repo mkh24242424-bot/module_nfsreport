@@ -7,6 +7,9 @@ import module.NFS_REPORTWRITER as NFS_RW
 import module.constants_reportwriter as REPORT_TYPER
 import module.NFS_HWPFORMATTER as NFS_HWP
 import module.NFS_BLOCKMANAGER as NFS_BM
+from module.barcode_generator import generate_barcode_no_text
+
+from datetime import datetime
 
 # 로깅 설정
 logging.basicConfig(
@@ -44,8 +47,9 @@ pm_ystr = NFS_PM.NFSProfileDataManager(kit='YSTR')
 pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
-logger.info("NFSReportInformation 객체 생성 (id_case=2025-C-6745)")
-info = NFS_RI.NFSReportInformation(id_case='2025-C-6845')
+logger.info("NFSReportInformation 객체 생성")
+id_case = "2025-C-6845"
+info = NFS_RI.NFSReportInformation(id_case=id_case)
 
 logger.info("사건 정보 추출 시작")
 info.extract_caseinfo_from_df(df_caseinfo)
@@ -93,6 +97,12 @@ hwp_formatter = NFS_HWP.NFS_HWPFormatter(path_base=path_base)
 logger.info("새 감정서 생성")
 hwp_formatter.create_new_report(code_case=info.id_case, type_report="DEFAULT")
 
+logger.info("꼬리말 바코드 입력")
+saved_path = generate_barcode_no_text(text=id_case, filename="barcode")
+absolute_path = os.path.abspath(saved_path)
+hwp_formatter.fill_barcode(path_barcode=absolute_path)
+os.remove(absolute_path)
+
 logger.info("사건 기본 정보 입력")
 for field in info.caseinfo:
     hwp_formatter.fill_fieldtext(field_name=field, text=info.caseinfo[field])
@@ -113,6 +123,13 @@ logger.info("기타 내용 입력")
 phrase_remark = RW.make_contents_remarks(phrase_result=phrase_result)
 hwp_formatter.fill_fieldtext(field_name="기타", text=phrase_remark)
 
+logger.info("날짜 입력")
+# 오늘 날짜 가져오기
+today = datetime.now()
+# "2025년 10월 15일" 형식으로 포맷팅
+formatted_date = f"{today.year}년 {today.month}월 {today.day}일"
+hwp_formatter.fill_fieldtext(field_name="작성일", text=formatted_date)
+
 logger.info("도장 입력")
 sealinfo = [
     {"name": "문경환", "path_img": "/img/seal1.png"},
@@ -120,7 +137,6 @@ sealinfo = [
     {"name": "문경환", "path_img": "/img/seal3.png"},
 ]
 hwp_formatter.fill_seal(sealinfo=sealinfo)
-
 
 logger.info("STR 프로필 표 입력")
 serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="STR20")
