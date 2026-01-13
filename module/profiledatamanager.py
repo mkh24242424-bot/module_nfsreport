@@ -2,8 +2,8 @@ import logging
 import pandas as pd
 import re
 import os
-from . import NFS_DATAFRAME as NFS_DF
-from . import NFS_STRPROFILE as NFS_SP
+from . import dataframe as NFS_DF
+from . import strprofile as NFS_SP
 from .exceptions import EvidenceNotFoundError
 from .constants_strprofile import DICT_MARKERS
 from .likelihood_calculator import LikelihoodCalculator

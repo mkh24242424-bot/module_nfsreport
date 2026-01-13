@@ -1,5 +1,5 @@
 import logging
-from . import NFS_PROFILEDATAMANAGER as NFS_PM
+from . import profiledatamanager as NFS_PM
 from .exceptions import CaseNotFoundError
 import pandas as pd
 from datetime import datetime

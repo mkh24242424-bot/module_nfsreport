@@ -1,12 +1,12 @@
 import logging
 import os
-import module.NFS_PROFILEDATAMANAGER as NFS_PM
+import module.profiledatamanager as NFS_PM
 import pandas as pd
-import module.NFS_REPORTINFORMATION as NFS_RI
-import module.NFS_REPORTWRITER as NFS_RW
+import module.reportinformation as NFS_RI
+import module.reportwriter as NFS_RW
 import module.constants_reportwriter as REPORT_TYPER
-import module.NFS_HWPFORMATTER as NFS_HWP
-import module.NFS_BLOCKMANAGER as NFS_BM
+import module.hwpformatter as NFS_HWP
+import module.blockmanager as NFS_BM
 from module.barcode_generator import generate_barcode_no_text
 
 from datetime import datetime

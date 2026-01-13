@@ -12,7 +12,7 @@ import pandas as pd
 import os
 from typing import Optional
 from .constants_strprofile import PROB_NOMATCH, ALLELE_FREQUENCY_FILENAME
-from . import NFS_STRPROFILE as NFS_SP
+from . import strprofile as NFS_SP
 
 logger = logging.getLogger(__name__)
 

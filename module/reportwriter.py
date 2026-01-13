@@ -1,8 +1,8 @@
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Callable
-from . import NFS_REPORTINFORMATION as NFS_RI
-from . import NFS_REPORTPHRASER as NFS_RP
+from . import reportinformation as NFS_RI
+from . import reportphraser as NFS_RP
 from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
     PHRASE_EXPERIMENT_METHOD, PHRASE_EXPERIMENT_METHOD_YSTR, \
         KEYWORD_SUSPECT, PHRASE_DBSEARCH_RESULT, PHRASE_MATCH_PROB,\
@@ -10,7 +10,7 @@ from .constants_reportwriter import KEYWORD_IGNORE_EVIDENCE, KEYWORD_NONSTUFF, \
         KEYWORDS_NOPROFILE, MICROVARIANT_ALLOWED_DECIMALS, \
         MICROVARIANT_SPECIAL_ALLELES, MICROVARIANT_SPECIAL_DECIMALS, LIMIT_ALLELE_BY_KIT
 from .constants_strprofile import DICT_MARKERS, TA_THRESHOLD
-from .NFS_BLOCKMANAGER import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
+from .blockmanager import BlockProfileManager, SingleProfileBlock, PairedProfileBlock
 import re
 logger = logging.getLogger(__name__)
 
@@ -236,8 +236,8 @@ class NFSReportWriter:
             >>> phrase = writer._make_contents_from_block(block, make_phrase_ref, "STR")
 
         See Also:
-            NFS_REPORTPHRASER.make_phrase_ref: 대조 문구 생성
-            NFS_REPORTPHRASER.make_phrase_res: 대표 문구 생성
+            reportphraser.make_phrase_ref: 대조 문구 생성
+            reportphraser.make_phrase_res: 대표 문구 생성
         """
         logger.debug(f"결과 문구 생성 시작 (kit={kit}, id_ref={block.id_ref})")
 
