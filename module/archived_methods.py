@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple, Optional
 # ==============================================================================
 # NFSProfileDataManager.export_to_str() 및 헬퍼 메서드들
 # ==============================================================================
-# 원래 위치: module/NFS_PROFILEDATAMANAGER.py
+# 원래 위치: module/profiledatamanager.py
 # 제거 일자: 2025-11-27
 # 제거 이유: 코드베이스 전체에서 호출되지 않음 (Dead Code)
 # 관련 이슈: LikelihoodCalculator 클래스 분리 작업 중 발견
@@ -296,7 +296,7 @@ def archived_export_to_str(
 # NFSProfileDataManager와 함께 사용하는 경우:
 
 from module.archived_methods import archived_export_to_str
-from module.NFS_PROFILEDATAMANAGER import NFSProfileDataManager
+from module.profiledatamanager import NFSProfileDataManager
 
 pm = NFSProfileDataManager(kit="STR")
 pm.df_profile = pd.read_csv("profile_data.csv")

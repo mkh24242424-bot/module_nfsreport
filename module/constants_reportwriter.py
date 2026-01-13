@@ -6,7 +6,7 @@ across STR and YSTR kits.
 """
 
 from typing import Dict, Callable
-import module.NFS_REPORTPHRASER as NFS_RP
+import module.reportphraser as NFS_RP
 from dataclasses import dataclass
 from typing import Callable
 
