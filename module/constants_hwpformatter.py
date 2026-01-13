@@ -1,7 +1,8 @@
 from dataclasses import dataclass   
 
 PATH_HWP_TEMPLATE ={
-    "df": "/form/form_report_default.hwp",
+    "DEFAULT": "/form/form_report_default.hwp",
+    "DECEASED_ONLY":"/form/form_report_default.hwp",
     # Future report type forms can be added here
     # "suspect": "path/to/suspect_form.hwp",
     # "paternity": "path/to/paternity_form.hwp",

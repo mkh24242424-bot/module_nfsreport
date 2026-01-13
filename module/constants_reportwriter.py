@@ -22,7 +22,7 @@ PhraserMapping = Dict[str, Dict[str, Callable]]
 DEFAULT_LR: tuple[str, str] = ("0", "0")
 
 REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
-    "df": {
+    "DEFAULT": {
         "STR": {
             "상피세포층": NFS_RP.make_pharase_differential_extraction,
             "검출형": NFS_RP.make_pharase_presume,
@@ -40,11 +40,23 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
             "NC": NFS_RP.make_phrase_nc_y,
         }
     },
-    "d":{
+    "DECEASED_ONLY":{
         "STR": {
-            "대조": NFS_RP.make_phrase_deceased,
+            "상피세포층": NFS_RP.make_pharase_differential_extraction,
+            "검출형": NFS_RP.make_pharase_presume,
+           "대조": NFS_RP.make_phrase_deceased,
+            "대조일치": NFS_RP.make_phrase_ref,
+            "대표일치": NFS_RP.make_phrase_res,
+            "ND": NFS_RP.make_phrase_nd,
+            "NC": NFS_RP.make_phrase_nc,
         },
-        "YSTR": {}
+        "YSTR": {
+            "대조": NFS_RP.make_phrase_none,
+            "대조일치": NFS_RP.make_phrase_ref_y,
+            "대표일치": NFS_RP.make_phrase_res_y,
+            "ND": NFS_RP.make_phrase_nd_y,
+            "NC": NFS_RP.make_phrase_nc_y,
+        }
     }
     # Future report types can be added here
     # "suspect": {...},

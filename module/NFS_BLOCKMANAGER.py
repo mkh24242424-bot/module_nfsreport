@@ -581,26 +581,32 @@ class BlockProfileManager:
         # 예: 증1호(상피세포층) + 증2호(상피세포층) → 하나의 first로 합침
         first_candidates = defaultdict(list)   # 상피세포층, 추정형 → first가 될 후보
         second_candidates = defaultdict(list)  # 정자층, 검출형 → second가 될 후보
-
+        paired_candidates = defaultdict(list)  # (id_ref_first, id_ref_second) → first/second 쌍 후보, id_ref가 같은 것끼리 묶
         for block in nonsingle_blocks:
+            print(block.id_ref, block.indexes, block.nickname, block.text_evidencenumber, block.type_block)
             text = self.info_written.loc[block.indexes[0], self.COL_TEXT_EVIDENCE]
 
             # 괄호 안 키워드 추출: "증1호(상피세포층)" → "상피세포층"
-            match = re.search(r'\(([^)]*)\)', text) # type: ignore
+            match = re.search(r'\(([^)]*)\)', block.text_evidencenumber) # type: ignore
             if not match:
                 continue
-            keyword = match.group(1)
-
+            keyword_pair = match.group(1)
+            print("keyword pair: ", keyword_pair)
             # first/second 후보로 분류
             # PAIR_TEXTEVIDENCE = {"상피세포층": "정자층", "추정형": "검출형"}
-            # key에서 base_text 제거: 같은 type_block의 블록들을 모두 합치기 위함
-            key = (keyword, block.type_block)
-            if keyword in PAIR_TEXTEVIDENCE:
+            # key: 증1호
+            match = re.search(r'증.+?호', block.text_evidencenumber) # type: ignore
+            if not match:
+                continue
+            key_evidence = match.group(0)
+            print("key_evidence : ", key_evidence)
+            block.text_evidencenumber = keyword_pair # 괄호 안 키워드로 교체  
+            if keyword_pair in PAIR_TEXTEVIDENCE:
                 # "상피세포층", "추정형" → first 후보
-                first_candidates[key].append(block)
-            elif keyword in PAIR_TEXTEVIDENCE.values():
+                first_candidates[key_evidence].append(block)
+            elif keyword_pair in PAIR_TEXTEVIDENCE.values():
                 # "정자층", "검출형" → second 후보
-                second_candidates[key].append(block)
+                second_candidates[key_evidence].append(block)
 
         # ========================================
         # 2단계: 매칭 + 합치기
@@ -610,43 +616,51 @@ class BlockProfileManager:
         logger.debug(f"블록 분류 완료 (first_candidates={len(first_candidates)}, second_candidates={len(second_candidates)})")
         paired_blocks = []
 
-        for (first_keyword, type_block), first_list in first_candidates.items():
-            # first_keyword에 대응하는 second_keyword 찾기
-            # 예: "상피세포층" → "정자층"
-            second_keyword = PAIR_TEXTEVIDENCE[first_keyword]
-            second_key = (second_keyword, type_block)
-            second_list = second_candidates.get(second_key, [])
-
+        for key_evidence, first_list in first_candidates.items():
+            second_list = second_candidates.get(key_evidence, [])
             # 매칭되는 second가 없으면 건너뛰기
             if not second_list:
-                logger.warning(f"매칭되는 second 블록이 없음 (first_keyword={first_keyword}, type_block={type_block})")
+                logger.warning(f"매칭되는 second 블록이 없음 (key_evidence={key_evidence})")
                 continue
+            key = (first_list[0].id_ref, second_list[0].id_ref)
+            paired_candidates[key].append((first_list, second_list))
 
-            # 같은 조건의 블록들 indexes 합치기
-            # 예: [블록A(idx=0), 블록B(idx=2)] → indexes=[0, 2]
+        for (id_ref_first, id_ref_second), list_paired in paired_candidates.items():
+            # first_keyword에 대응하는 second_keyword 찾기
+            # 예: "상피세포층" → "정자층"
+ 
+            first_list = []
+            second_list = []
+            for first, second in list_paired:
+                first_list.append(first)
+                second_list.append(second)
+            first_list = [block for sublist in first_list for block in sublist]
+            second_list = [block for sublist in second_list for block in sublist]
+
             first_indexes = [idx for block in first_list for idx in block.indexes]
             second_indexes = [idx for block in second_list for idx in block.indexes]
-            logger.debug(f"paired 블록 매칭 (first_keyword={first_keyword}, type_block={type_block}, first_indexes={first_indexes}, second_indexes={second_indexes})")
+            logger.debug(f"paired 블록 매칭 first_indexes={first_indexes}, second_indexes={second_indexes})")
 
             # PairedProfileBlock 생성
             first=SingleProfileBlock(
                     indexes=first_indexes,
-                    type_block=type_block,
+                    type_block=first_list[0].type_block,
                     nickname=first_list[0].nickname,
-                    id_ref=first_list[0].id_ref)
-            first.text_evidencenumber = first_keyword
+                    id_ref=first_list[0].id_ref,
+                    text_evidencenumber=first_list[0].text_evidencenumber)
+            
             second=SingleProfileBlock(
                     indexes=second_indexes,
-                    type_block=type_block,
+                    type_block=second_list[0].type_block,
                     nickname=second_list[0].nickname,
-                    id_ref=second_list[0].id_ref
+                    id_ref=second_list[0].id_ref,
+                    text_evidencenumber=second_list[0].text_evidencenumber
                 )
-            second.text_evidencenumber = second_keyword
             # 첫 번째 블록의 메타정보(nickname, id_ref) 사용
             paired_blocks.append(PairedProfileBlock(
                 first=first,
                 second=second,
-                type_block=first_keyword  # "상피세포층" 또는 "추정형"
+                type_block=first_list[0].text_evidencenumber # "상피세포층" 또는 "추정형"
             ))
 
         logger.debug(f"Paired blocks 생성 완료 (총 {len(paired_blocks)}개)")
@@ -719,23 +733,35 @@ class BlockProfileManager:
                 # nonsingle은 개별 블록으로 분리 (각각 단일 index)
                 # → 나중에 paired 매칭 시 개별 처리 필요
                 for idx in idxs_nonsingle:
+                    text_evidencenumber = self.evidence_text_generator.create_text_evidence( # type: ignore
+                    indexes=block.indexes,
+                    kit=self.kit,
+                    reaction=reaction,
+                    table=table)
                     nonsingle_blocks.append(SingleProfileBlock(
                         indexes=[idx],
                         type_block=block.type_block,
                         nickname=block.nickname,
-                        id_ref=block.id_ref
+                        id_ref=block.id_ref,
+                        text_evidencenumber=text_evidencenumber
                     ))
 
                 # single은 그대로 유지
                 if idxs_single:
+                    text_evidencenumber = self.evidence_text_generator.create_text_evidence( # type: ignore
+                    indexes=block.indexes,
+                    kit=self.kit,
+                    reaction=reaction,
+                    table=table)
                     single_blocks.append(SingleProfileBlock(
                         indexes=idxs_single,
                         type_block=block.type_block,
                         nickname=block.nickname,
-                        id_ref=block.id_ref
+                        id_ref=block.id_ref,
+                        text_evidencenumber=text_evidencenumber
                     ))
 
-            # 3. Paired blocks 생성
+            # 3. Paired blocks 생성 
             logger.debug(f"블록 분리 완료 (single_blocks={len(single_blocks)}, nonsingle_blocks={len(nonsingle_blocks)})")
             paired_blocks = self._create_paired_blocks(nonsingle_blocks)
             logger.debug(f"Paired blocks 생성 완료 (개수={len(paired_blocks)})")
@@ -748,9 +774,9 @@ class BlockProfileManager:
             logger.debug(f"single 모드: 기존 블록 사용 (개수={len(self.blocks)})")
             blocks = self.blocks
 
-        # ========================================
-        # 공통 처리: 텍스트 생성 및 정렬
-        # ========================================
+        # # ========================================
+        # # 공통 처리: 텍스트 생성 및 정렬
+        # # ========================================
         logger.debug(f"증거물 텍스트 생성 시작 (블록 수={len(blocks)})")
         for block in blocks:
             block.text_evidencenumber = self.evidence_text_generator.create_text_evidence( # type: ignore
@@ -760,6 +786,7 @@ class BlockProfileManager:
                 table=table
             )
         logger.debug("증거물 텍스트 생성 완료 ")
+        # 만약 없어서 문제가 생긴다면 #3에 추가할 것.
 
         # index 기준 오름차순 정렬
         sorted_blocks = sorted(blocks, key=lambda b: b.indexes[0])
