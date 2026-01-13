@@ -40,11 +40,11 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
             "NC": NFS_RP.make_phrase_nc_y,
         }
     },
-    "DECEASED_ONLY":{
+    "DECEASED_ONLY": {
         "STR": {
             "상피세포층": NFS_RP.make_pharase_differential_extraction,
             "검출형": NFS_RP.make_pharase_presume,
-           "대조": NFS_RP.make_phrase_deceased,
+            "대조": NFS_RP.make_phrase_deceased,
             "대조일치": NFS_RP.make_phrase_ref,
             "대표일치": NFS_RP.make_phrase_res,
             "ND": NFS_RP.make_phrase_nd,
