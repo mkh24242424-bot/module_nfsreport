@@ -4,6 +4,7 @@ win32com을 사용하여 HWP 감정서의 누름틀에서 정보를 추출합니
 """
 
 import logging
+import re
 from typing import Any
 
 import win32com.client as win32
@@ -74,6 +75,34 @@ class HWPExtractor:
             logger.warning(f"필드 '{field_name}' 읽기 실패: {e}")
             return ""
 
+    def _format_date(self, date_str: str) -> str:
+        """날짜 포맷 변환: (2025년 10월 27일) → 2025. 10. 27
+
+        Args:
+            date_str: HWP에서 추출한 날짜 문자열
+
+        Returns:
+            변환된 날짜 문자열
+        """
+        match = re.search(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일", date_str)
+        if match:
+            year, month, day = match.groups()
+            return f"{year}. {int(month)}. {int(day)}"
+        return date_str
+
+    def _format_nfs_number(self, nfs_str: str) -> str:
+        """국과수 접수번호 포맷 변환: 2025-C-7982호 → 2025-C-7982
+
+        Args:
+            nfs_str: HWP에서 추출한 국과수 접수번호
+
+        Returns:
+            마지막 '호' 제거된 문자열
+        """
+        if nfs_str.endswith("호"):
+            return nfs_str[:-1]
+        return nfs_str
+
     def extract_comparison_case_info(self) -> tuple[str, str, str]:
         """연관 건 정보 추출
 
@@ -98,12 +127,16 @@ class HWPExtractor:
         if not request_date:
             request_date = DEFAULT_VALUES["request_date"]
             logger.debug(f"접수 날짜 추출 실패 → 기본값: {request_date}")
+        else:
+            request_date = self._format_date(request_date)
 
         # 국과수 접수번호
         nfs_number = self.get_field_text(NAME_FIELDTEXT["접수번호"])
         if not nfs_number:
             nfs_number = DEFAULT_VALUES["nfs_number"]
             logger.debug(f"국과수 접수번호 추출 실패 → 기본값: {nfs_number}")
+        else:
+            nfs_number = self._format_nfs_number(nfs_number)
 
         return scas_number, request_date, nfs_number
 
