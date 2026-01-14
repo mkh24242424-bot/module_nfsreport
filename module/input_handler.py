@@ -72,22 +72,13 @@ def _askstring_topmost(title: str, prompt: str, parent: tk.Tk) -> str | None:
     dialog.grab_set()
     dialog.focus_force()
 
-    # 화면 중앙에 배치
-    dialog.update_idletasks()
-    width = 350
-    height = 120
-    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-    y = (dialog.winfo_screenheight() // 2) - (height // 2)
-    dialog.geometry(f"{width}x{height}+{x}+{y}")
-    dialog.resizable(False, False)
-
     # 프롬프트 레이블
     label = tk.Label(dialog, text=prompt, justify=tk.LEFT, wraplength=320)
-    label.pack(padx=10, pady=(10, 5))
+    label.pack(padx=15, pady=(15, 10))
 
     # 입력 필드
     entry = tk.Entry(dialog, width=40)
-    entry.pack(padx=10, pady=5)
+    entry.pack(padx=15, pady=5)
     entry.focus_set()
 
     def on_ok(event=None):
@@ -99,7 +90,7 @@ def _askstring_topmost(title: str, prompt: str, parent: tk.Tk) -> str | None:
 
     # 버튼 프레임
     btn_frame = tk.Frame(dialog)
-    btn_frame.pack(pady=10)
+    btn_frame.pack(pady=15)
     tk.Button(btn_frame, text="확인", width=8, command=on_ok).pack(side=tk.LEFT, padx=5)
     tk.Button(btn_frame, text="취소", width=8, command=on_cancel).pack(side=tk.LEFT, padx=5)
 
@@ -107,6 +98,16 @@ def _askstring_topmost(title: str, prompt: str, parent: tk.Tk) -> str | None:
     dialog.bind("<Return>", on_ok)
     dialog.bind("<Escape>", on_cancel)
     dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+
+    # 콘텐츠에 맞게 크기 자동 조절 후 화면 중앙에 배치
+    dialog.update_idletasks()
+    width = dialog.winfo_reqwidth()
+    height = dialog.winfo_reqheight()
+    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+    dialog.geometry(f"+{x}+{y}")
+    dialog.minsize(300, height)
+    dialog.resizable(False, False)
 
     dialog.wait_window()
     return result[0]
