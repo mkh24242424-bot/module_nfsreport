@@ -62,15 +62,60 @@ def select_input_mode() -> Literal["manual", "hwp"]:
         root.destroy()
 
 
+def _askstring_topmost(title: str, prompt: str, parent: tk.Tk) -> str | None:
+    """항상 최상위에 표시되는 문자열 입력 다이얼로그"""
+    result = [None]
+
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    dialog.attributes("-topmost", True)
+    dialog.grab_set()
+    dialog.focus_force()
+
+    # 화면 중앙에 배치
+    dialog.update_idletasks()
+    width = 350
+    height = 120
+    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    dialog.resizable(False, False)
+
+    # 프롬프트 레이블
+    label = tk.Label(dialog, text=prompt, justify=tk.LEFT, wraplength=320)
+    label.pack(padx=10, pady=(10, 5))
+
+    # 입력 필드
+    entry = tk.Entry(dialog, width=40)
+    entry.pack(padx=10, pady=5)
+    entry.focus_set()
+
+    def on_ok(event=None):
+        result[0] = entry.get()
+        dialog.destroy()
+
+    def on_cancel(event=None):
+        dialog.destroy()
+
+    # 버튼 프레임
+    btn_frame = tk.Frame(dialog)
+    btn_frame.pack(pady=10)
+    tk.Button(btn_frame, text="확인", width=8, command=on_ok).pack(side=tk.LEFT, padx=5)
+    tk.Button(btn_frame, text="취소", width=8, command=on_cancel).pack(side=tk.LEFT, padx=5)
+
+    # 키 바인딩
+    dialog.bind("<Return>", on_ok)
+    dialog.bind("<Escape>", on_cancel)
+    dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+
+    dialog.wait_window()
+    return result[0]
+
+
 def _get_input_with_default(prompt: str, title: str, default_key: str, parent: tk.Tk) -> str:
     """입력값이 없거나 오류 시 기본값 반환"""
     try:
-        # 다이얼로그가 항상 최상위에 표시되도록 포커스 강제 활성화
-        parent.lift()
-        parent.focus_force()
-        parent.update()
-
-        value = simpledialog.askstring(title, prompt, parent=parent)
+        value = _askstring_topmost(title, prompt, parent)
         if not value or not value.strip():
             logger.debug(f"{title}: 빈 입력 → 기본값 사용: {DEFAULT_VALUES[default_key]}")
             return DEFAULT_VALUES[default_key]
