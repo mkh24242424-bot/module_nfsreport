@@ -5,10 +5,22 @@ HWP 감정서에서 추출하는 기능을 제공합니다.
 """
 
 import logging
+import sys
 from typing import Literal
 
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog
+
+# Windows 고해상도 디스플레이 DPI 설정
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-Monitor DPI Aware
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()  # 폴백: System DPI Aware
+        except Exception:
+            pass
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +65,11 @@ def select_input_mode() -> Literal["manual", "hwp"]:
 def _get_input_with_default(prompt: str, title: str, default_key: str, parent: tk.Tk) -> str:
     """입력값이 없거나 오류 시 기본값 반환"""
     try:
+        # 다이얼로그가 항상 최상위에 표시되도록 포커스 강제 활성화
+        parent.lift()
+        parent.focus_force()
+        parent.update()
+
         value = simpledialog.askstring(title, prompt, parent=parent)
         if not value or not value.strip():
             logger.debug(f"{title}: 빈 입력 → 기본값 사용: {DEFAULT_VALUES[default_key]}")
