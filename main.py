@@ -47,8 +47,11 @@ pm_ystr = NFS_PM.NFSProfileDataManager(kit='YSTR')
 pm_ystr.df_profile = df_ystr
 logger.debug(f"YSTR 프로필 데이터 로드 완료 ({len(df_ystr)} profiles)")
 
-logger.info("NFSReportInformation 객체 생성")
 id_case = input("사건 번호를 입력하세요 (예: 2025-C-6745): ")
+type_report = input("감정서 유형을 입력하세요: ")
+type_str = input("STR20 or STR: ")
+
+logger.info("NFSReportInformation 객체 생성")
 info = NFS_RI.NFSReportInformation(id_case=id_case)
 
 logger.info("사건 정보 추출 시작")
@@ -85,7 +88,8 @@ blocks_manager_ystr = NFS_BM.BlockProfileManager(
     kit='YSTR'
 )
 blocks_manager_ystr.generate_blocks()
-type_report = input("감정서 유형을 입력하세요 (df/d): ")
+
+
 logger.info("NFSReportWriter 객체 생성")
 RW = NFS_RW.NFSReportWriter(info, blocks_manager_str, blocks_manager_ystr, type_report=type_report)
 
@@ -138,9 +142,9 @@ sealinfo = [
 hwp_formatter.fill_seal(sealinfo=sealinfo)
 
 logger.info("STR 프로필 표 입력")
-serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="STR20")
+serialized_profile, note_etc = RW.make_contents_profile_blocks(kit=type_str)
 hwp_formatter.fill_fieldtext(field_name="STR프로필_기타", text=note_etc)
-hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="STR20")
+hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit=type_str)
 
 logger.info("YSTR 프로필 표 입력")
 serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="YSTR")

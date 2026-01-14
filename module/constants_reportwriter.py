@@ -57,9 +57,46 @@ REPORT_TYPE_PHRASERS: Dict[str, PhraserMapping] = {
             "ND": NFS_RP.make_phrase_nd_y,
             "NC": NFS_RP.make_phrase_nc_y,
         }
-    }
+    },
+    "SUSPECT-MATCH": {
+        "STR": {
+            "대조": NFS_RP.make_phrase_suspect_match,
+        },
+        "YSTR": {
+            "대조": NFS_RP.make_phrase_suspect_match_y,
+        }
+    },
+    "SUSPECT-NOMATCH": {
+        "STR": {
+            "대조": NFS_RP.make_phrase_suspect_nomatch,
+        },
+        "YSTR": {
+            "대조": NFS_RP.make_phrase_suspect_nomatch_y
+        }
+    },
+    "SUSPECT-NOCOMPARABLE": {
+        "STR": {
+            "대조": NFS_RP.make_phrase_suspect_nocomparable,
+        },
+        "YSTR": {
+            "대조": NFS_RP.make_phrase_suspect_nocomparable_y,
+        }
+    },
+    "PATERNITY-MATCH": {
+        "STR": {
+            "대조": NFS_RP.make_phrase_paternity_match,
+        },
+        "YSTR": {}
+    },
+    "PATERNITY-NOMATCH": {
+        "STR": {
+            "대조": NFS_RP.make_phrase_paternity_nomatch
+        },
+        "YSTR": {}
+    },
+
     # Future report types can be added here
-    # "suspect": {...},
+    # "suspect": {...}, 
     # "paternity": {...},
 }
 
