@@ -99,7 +99,7 @@ class NFS_HWPFormatter:
         def input_list_text_vertically(list_text):
             for value in list_text:
                 input_text(value)
-                # self.hwp_control.HAction.Run("MoveDown")
+                # self.hwp_control.HAction.Run("MoveDown") # 테이블 크기가 페이지를 넘어가면 MoveDown 사용 시 오류 발생. 아래 방법이 속도는 느리지만 더 로버스트함.
                 self.hwp_control.HAction.Run("TableCellBlock")
                 self.hwp_control.HAction.Run("TableLowerCell")
                 self.hwp_control.HAction.Run("Cancel")
