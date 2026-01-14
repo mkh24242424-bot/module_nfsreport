@@ -45,7 +45,7 @@ def make_phrase_ref(info: Properties_Phrase) -> str:
         # 터미널 모드: input() 사용
         logger.debug("터미널 모드: input() 사용")
         try:
-            response = input(f"'{info.nickname}'에 대해 식별지수를 제외하시겠습니까? (y/n): ").strip().lower()
+            response = input(f"{info.text_evidence}의 '{info.nickname}' 일치에 대해 식별지수를 제외하시겠습니까? (y/n): ").strip().lower()
             exclude_index = (response in ['y', 'yes', '예'])
         except (EOFError, KeyboardInterrupt):
             logger.warning("입력 중단됨. 식별지수 포함")
