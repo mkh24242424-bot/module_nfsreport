@@ -99,7 +99,10 @@ class NFS_HWPFormatter:
         def input_list_text_vertically(list_text):
             for value in list_text:
                 input_text(value)
-                self.hwp_control.HAction.Run("MoveDown")
+                # self.hwp_control.HAction.Run("MoveDown")
+                self.hwp_control.HAction.Run("TableCellBlock")
+                self.hwp_control.HAction.Run("TableLowerCell")
+                self.hwp_control.HAction.Run("Cancel")
             self.hwp_control.HAction.Run("MoveUp")
         
         def move_to_next_column():
