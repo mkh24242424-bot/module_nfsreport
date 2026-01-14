@@ -142,9 +142,9 @@ sealinfo = [
 hwp_formatter.fill_seal(sealinfo=sealinfo)
 
 logger.info("STR 프로필 표 입력")
-serialized_profile, note_etc = RW.make_contents_profile_blocks(kit=type_str)
+serialized_profile, note_etc = RW.make_contents_profile_blocks(kit=type_str) # type: ignore
 hwp_formatter.fill_fieldtext(field_name="STR프로필_기타", text=note_etc)
-hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit=type_str)
+hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit=type_str)  # type: ignore
 
 logger.info("YSTR 프로필 표 입력")
 serialized_profile, note_etc = RW.make_contents_profile_blocks(kit="YSTR")

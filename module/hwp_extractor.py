@@ -48,7 +48,7 @@ class HWPExtractor:
     def _open_document(self) -> None:
         """HWP 문서 열기"""
         try:
-            self.hwp_control = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")
+            self.hwp_control = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")  # type: ignore
             self.hwp_control.RegisterModule("FilePathCheckDLL", "FilePathCheckerModuleExample")
             # 백그라운드 모드로 열기 (화면에 표시하지 않음)
             self.hwp_control.XHwpWindows.Item(0).Visible = False

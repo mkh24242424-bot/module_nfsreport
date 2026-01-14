@@ -207,13 +207,9 @@ class NFS_HWPFormatter:
         if num_img==0:
             return
         elif num_img==1: # 이미지가 하나면 단일 이미지용 테이블 사용. 다수 이미지용 테이블은 삭제
-            time.sleep(1)
             self.hwp_control.MoveToField(NAME_FIELDTABLE["TABLE_IMG_MULTI_FIRSTCELL"])
-            time.sleep(1)
             self.hwp_control.HAction.Run("SelectCtrlReverse")
-            time.sleep(1)
             self.hwp_control.HAction.Run("Delete")  
-            time.sleep(1)
             self.hwp_control.MoveToField(NAME_FIELDTABLE["IMG_ONE"])
         else: # 이미지가 여럿이면 다수 이미지용 테이블 사용. 단일 이미지용 테이블은 삭제
             self.hwp_control.MoveToField(NAME_FIELDTABLE["TABLE_IMG_ONE_FIRSTCELL"])
