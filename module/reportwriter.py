@@ -250,7 +250,7 @@ class NFSReportWriter:
             gender=gender,
             likelihoodratio=lr,
             text_evidence=block.text_evidencenumber,
-            nickname=block.nickname
+            nickname=block.get_nickname_for_phrase()
         )
 
         # 3. Phraser 함수 호출
@@ -513,7 +513,7 @@ class NFSReportWriter:
         for key, item in normalized.items():
             is_physical = not any(kw in item for kw in KEYWORD_NONSTUFF)
             if is_physical and key not in has_sub_items:
-                normalized[key] = f'{item}\r\n        - '
+                normalized[key] = f'{item}\r\n - '
         
         # 4. 키 정렬 (예: 1-1, 1-2, 2-1 순)
         num_pattern = re.compile(r'\d+')
@@ -531,7 +531,7 @@ class NFSReportWriter:
             if key[-1].isnumeric():
                 lines_output.append(f'증{key}호: {normalized[key]}')
             else:
-                lines_output.append(f'\t증{key}호:')
+                lines_output.append(f' 증{key}호:')
         
         return '\r\n'.join(lines_output)
 

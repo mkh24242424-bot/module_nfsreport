@@ -48,6 +48,11 @@ class SingleProfileBlock(ProfileBlock):
     def get_singles(self) -> Iterator['SingleProfileBlock']:
         yield self
 
+    def get_nickname_for_phrase(self) -> str:
+        """문구 생성용 nickname 반환. 대조 블록은 증거물번호 텍스트 포함. 예시: 증1호 피해자 김철수"""
+        if self.type_block == "대조":
+            return f"{self.text_evidencenumber} {self.nickname}"
+        return self.nickname
 
 class PairedProfileBlock(ProfileBlock):
     """순서 있는 두 SingleBlock의 쌍
