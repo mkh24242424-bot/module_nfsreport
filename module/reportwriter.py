@@ -646,9 +646,9 @@ class NFSReportWriter:
         markers = DICT_MARKERS[kit]
         block_manager = self.blocks_manager["STR"] if kit in ["STR", "STR20"] else self.blocks_manager[kit]
         if kit in ["STR", "STR20"]:
-            blocks = block_manager.export_blocks(block_type='pair', reaction=False, table=True)
+            blocks = block_manager.export_blocks(block_type='pair', reaction=False)
         elif kit == "YSTR":
-            blocks = block_manager.export_blocks(block_type='single', reaction=False, table=True)
+            blocks = block_manager.export_blocks(block_type='single', reaction=False)
 
         serialized_blocks = []
         all_metas: list[ProfileMeta] = []
