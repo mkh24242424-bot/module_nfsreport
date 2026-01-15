@@ -249,7 +249,7 @@ class NFSReportWriter:
         properties = NFS_RP.Properties_Phrase(
             gender=gender,
             likelihoodratio=lr,
-            text_evidence=block.text_evidencenumber,
+            text_evidence=block.get_text_evidencenumber_for_phrase(),
             nickname=block.get_nickname_for_phrase()
         )
 
