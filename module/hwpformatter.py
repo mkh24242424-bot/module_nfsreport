@@ -115,12 +115,8 @@ class NFS_HWPFormatter:
 
         markers = DICT_MARKERS[kit]
 
-        # YSTR 데이터가 없으면 표 삭제
-        if kit=="YSTR" and len(serialized_profile)==0:  
-            self.hwp_control.MoveToField(NAME_FIELDTABLE["TABLE_YSTR_FIRSTCELL"])
-            self.hwp_control.HAction.Run("SelectCtrlReverse")
-            self.hwp_control.HAction.Run("SelectCtrlReverse")
-            self.hwp_control.HAction.Run("Delete")  
+        # 데이터가 없으면 조기 반환
+        if len(serialized_profile)==0:  
             return
         
         # 표의 첫번째 데이터 칼럼 셀로 이동
