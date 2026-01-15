@@ -57,7 +57,7 @@ def make_phrase_ref(info: Properties_Phrase) -> str:
         phrase = f"{info.text_evidence}에서 {info.nickname}의 디엔에이형이 검출됨.\r\n"
     else:
         phrase = f"{info.text_evidence}에서 {info.nickname}의 디엔에이형과 일치하는 {info.gender} 디엔에이형이 검출됨.\r\n"
-        phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
+        phrase = phrase + f" * 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
     logger.debug(f"대조 문구 생성 완료")
     return phrase
 
@@ -105,7 +105,7 @@ def make_phrase_suspect_match(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = get_comparison_case_input()
     phrase =f"{info.nickname}의 디엔에이형은 관련 건 {request_scas}({request_date})호, " \
               f"국립과학수사연구원 접수번호 {request_number}호의 ~에서 검출된 {info.gender} 디엔에이형과 일치함.\r\n"
-    phrase = phrase + f"* 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
+    phrase = phrase + f" * 이와 같이 일치된 디엔에이형의 개인식별지수는 한국인 집단에서 {info.likelihoodratio[0]} x 10{info.likelihoodratio[1]}임.\r\n"
     return phrase
 
 def make_phrase_suspect_match_y(info: Properties_Phrase) -> str:
@@ -138,7 +138,7 @@ def make_phrase_paternity_match(info: Properties_Phrase) -> str:
     request_scas, request_date, request_number = get_comparison_case_input()
     phrase = f"{info.nickname}의 디엔에이형은 관련 건 {request_scas}({request_date})호, " \
              f"국립과학수사연구원 접수번호 {request_number}호에서 검출된 ***의 디엔에이형과 대조 비교시, " \
-             f"친자관계임이 인정됨.\r\n* 이와 같이 친자관계가 성립될 확률은 23 STR 디엔에이형에서 99.9999%임.\r\n"
+             f"친자관계임이 인정됨.\r\n * 이와 같이 친자관계가 성립될 확률은 23 STR 디엔에이형에서 99.9999%임.\r\n"
     return phrase
 
 def make_phrase_paternity_nomatch(info: Properties_Phrase) -> str:
