@@ -50,8 +50,10 @@ class SingleProfileBlock(ProfileBlock):
 
     def get_nickname_for_phrase(self) -> str:
         """문구 생성용 nickname 반환. 대조 블록은 증거물번호 텍스트 포함. 예시: 증1호 피해자 김철수"""
-        if self.type_block == "대조":
-            return f"{self.text_evidencenumber} {self.nickname}"
+        print(self.type_block, self.nickname)
+        subnumber_ref = "-".join(self.id_ref.split("-")[3:])
+        if self.type_block == "대조일치" or self.type_block == "대조":
+            return f"증{subnumber_ref}호 {self.nickname}"
         return self.nickname
     
     def get_text_evidencenumber_for_phrase(self) -> str:
