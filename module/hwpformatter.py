@@ -103,7 +103,9 @@ class NFS_HWPFormatter:
                 self.hwp_control.HAction.Run("TableCellBlock")
                 self.hwp_control.HAction.Run("TableLowerCell")
                 self.hwp_control.HAction.Run("Cancel")
-            self.hwp_control.HAction.Run("MoveUp")
+            self.hwp_control.HAction.Run("TableCellBlock")
+            self.hwp_control.HAction.Run("TableUpperCell")
+            self.hwp_control.HAction.Run("Cancel")
         
         def move_to_next_column():
             self.hwp_control.HAction.Run("TableCellBlock")
@@ -135,8 +137,9 @@ class NFS_HWPFormatter:
                 split_headline()
                 input_text(block[0]) # paired profile의 증거물 번호(증1호)
                 # 첫번째 프로필 입력란으로 이동
-                self.hwp_control.HAction.Run("MoveDown")
-                self.hwp_control.HAction.Run("MoveLeft")
+                self.hwp_control.HAction.Run("TableCellBlock")
+                self.hwp_control.HAction.Run("TableLowerCell")
+                self.hwp_control.HAction.Run("Cancel")
                 idx_start_second_profile = 2+len(markers)
                 input_list_text_vertically(block[1:idx_start_second_profile])
                 # 두번째 프로필 입력란으로 이동
