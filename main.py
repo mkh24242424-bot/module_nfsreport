@@ -7,6 +7,7 @@ import module.reportwriter as NFS_RW
 import module.constants_reportwriter as REPORT_TYPER
 import module.hwpformatter as NFS_HWP
 import module.blockmanager as NFS_BM
+import module.postprocessor as NFS_PP
 from module.barcode_generator import generate_barcode_no_text
 
 from datetime import datetime
@@ -106,12 +107,16 @@ absolute_path = os.path.abspath(saved_path)
 hwp_formatter.fill_barcode(path_barcode=absolute_path)
 os.remove(absolute_path)
 
+logger.info("텍스트 후처리기 생성")
+postprocessor = NFS_PP.TextPostprocessor()
+
 logger.info("사건 기본 정보 입력")
 for field in info.caseinfo:
     hwp_formatter.fill_fieldtext(field_name=field, text=info.caseinfo[field])
 
 logger.info("감정물명 입력")
 evidence_text = RW.make_contents_evidence()
+evidence_text = postprocessor.process_evidence(evidence_text)
 hwp_formatter.fill_fieldtext(field_name="감정물", text=evidence_text)
 
 logger.info("실험방법 입력")
@@ -154,6 +159,10 @@ hwp_formatter.fill_table_profile(serialized_profile=serialized_profile, kit="YST
 logger.info("이미지 입력")
 paths_img = ["C:/Users/mkh24/PycharmProjects/module_nfsreport/img/Pictures/2025-C-6745-1.JPG"]
 hwp_formatter.insert_pictures(paths_img=paths_img)
+
+logger.info("HWP 후처리 시작")
+hwp_postprocessor = NFS_PP.HWPPostprocessor(hwp_control=hwp_formatter.hwp_control)
+hwp_postprocessor.process()
 
 hwp_formatter.save_and_move_to_firstpage()
 logger.info("========== 프로그램 종료 ==========")
