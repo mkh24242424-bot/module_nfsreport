@@ -55,10 +55,11 @@ class SingleProfileBlock(ProfileBlock):
         return self.nickname
     
     def get_text_evidencenumber_for_phrase(self) -> str:
-        """문구 생성용 text_evidencenumber 반환. 2개면 '및'으로 연결. 예: '증1호, 증2호' -> '증1호 및 증2호'"""
-        parts = [p.strip() for p in self.text_evidencenumber.split(',')]
-        if len(parts) == 2:
-            return f"{parts[0]} 및 {parts[1]}"
+        """문구 생성용 text_evidencenumber 반환. 증거물이 딱 2개면 '및'으로 연결. 예: '증1호, 증2호' -> '증1호 및 증2호'"""
+        if len(self.indexes) == 2:
+            parts = [p.strip() for p in self.text_evidencenumber.split(',')]
+            if len(parts) == 2:
+                return f"{parts[0]} 및 {parts[1]}"
         return self.text_evidencenumber
 
 
