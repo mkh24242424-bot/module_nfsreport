@@ -6,10 +6,18 @@ Postprocessor module for NFSReport.
 
 
 class TextPostprocessor:
-    """텍스트 레벨 후처리 - HWPFormatter 입력 전 텍스트 수정"""
+    """텍스트 레벨 후처리"""
 
-    def process(self, text: str) -> str:
-        return text
+    def process_evidence(self, text: str) -> str:
+        """
+        증거물명 텍스트 변환.
+
+        변환 규칙:
+        - "담배꽁초" → "담배꽁초()"
+        """
+        result = text
+        result = result.replace("담배꽁초", "담배꽁초()")
+        return result
 
 
 class HWPPostprocessor:
