@@ -2,7 +2,7 @@ import logging
 from typing import Literal, Iterator
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from module.contants_blockmanager import COLNAME_PER_KIT, KEYWORDS_PAIREDPROFILE, PAIR_TEXTEVIDENCE
+from Modules.contants_blockmanager import COLNAME_PER_KIT, KEYWORDS_PAIREDPROFILE, PAIR_TEXTEVIDENCE
 import pandas as pd
 import re
 from collections import defaultdict

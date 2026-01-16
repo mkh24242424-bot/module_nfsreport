@@ -1,13 +1,13 @@
 from dataclasses import dataclass   
 
 PATH_HWP_TEMPLATE ={
-    "DEFAULT": "/form/form_report_default.hwp",
-    "DECEASED_ONLY":"/form/form_report_default.hwp",
-    "SUSPECT-MATCH": "/form/form_report_default.hwp",
-    "SUSPECT-NOMATCH": "/form/form_report_default.hwp",
-    "SUSPECT-NOCOMPARABLE": "/form/form_report_default.hwp",
-    "PATERNITY-MATCH": "/form/form_report_paternity.hwp",
-    "PATERNITY-NOMATCH": "/form/form_report_paternity.hwp",
+    "DEFAULT": "/Form/form_report_default.hwp",
+    "DECEASED_ONLY":"/Form/form_report_default.hwp",
+    "SUSPECT-MATCH": "/Form/form_report_default.hwp",
+    "SUSPECT-NOMATCH": "/Form/form_report_default.hwp",
+    "SUSPECT-NOCOMPARABLE": "/Form/form_report_default.hwp",
+    "PATERNITY-MATCH": "/Form/form_report_paternity.hwp",
+    "PATERNITY-NOMATCH": "/Form/form_report_paternity.hwp",
 }
 
 NAME_FIELDTEXT ={

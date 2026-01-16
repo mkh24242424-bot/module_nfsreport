@@ -5,7 +5,7 @@ Postprocessor module for NFSReport.
 """
 
 
-from module.constants_hwpformatter import NAME_FIELDTABLE
+from Modules.constants_hwpformatter import NAME_FIELDTABLE
 
 
 class TextPostprocessor:

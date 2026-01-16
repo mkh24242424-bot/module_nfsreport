@@ -308,7 +308,7 @@ class NFSReportWriter:
             KeyError: 필요한 kit 또는 block_type이 누락된 경우
 
         Examples:
-            >>> from module.constants_reportwriter import REPORT_TYPE_PHRASERS
+            >>> from Modules.constants_reportwriter import REPORT_TYPE_PHRASERS
             >>> RW = NFSReportWriter(info, [])
             >>> RW._make_contents_experiment_result(REPORT_TYPE_PHRASERS["suspect"])
         """

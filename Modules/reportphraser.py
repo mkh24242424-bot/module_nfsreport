@@ -2,7 +2,7 @@ import logging
 from typing import Any
 from dataclasses import dataclass
 import re
-from module.input_handler import get_comparison_case_input
+from Modules.input_handler import get_comparison_case_input
 logger = logging.getLogger(__name__)
 
 
