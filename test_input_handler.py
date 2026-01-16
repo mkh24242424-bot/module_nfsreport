@@ -1,6 +1,6 @@
 """input_handler 테스트 실행 스크립트"""
 
-from module.input_handler import get_comparison_case_input
+from Modules.input_handler import get_comparison_case_input
 
 if __name__ == "__main__":
     scas, date, nfs_number = get_comparison_case_input()

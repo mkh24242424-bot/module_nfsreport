@@ -295,14 +295,14 @@ def archived_export_to_str(
 """
 # NFSProfileDataManager와 함께 사용하는 경우:
 
-from module.archived_methods import archived_export_to_str
-from module.profiledatamanager import NFSProfileDataManager
+from Modules.archived_methods import archived_export_to_str
+from Modules.profiledatamanager import NFSProfileDataManager
 
 pm = NFSProfileDataManager(kit="STR")
 pm.df_profile = pd.read_csv("profile_data.csv")
 
 # 마커 리스트 준비
-from module.constants_strprofile import DICT_MARKERS, TA_THRESHOLD
+from Modules.constants_strprofile import DICT_MARKERS, TA_THRESHOLD
 list_marker = DICT_MARKERS["STR"][:-3]  # STR-20
 
 # 프로필 문자열 변환
